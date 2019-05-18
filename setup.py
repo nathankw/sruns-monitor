@@ -35,7 +35,8 @@ setup(
   ],
   description = "Looks for new Illumina sequencing runs and tars them up into GCP storage"
   install_requires = [
-    "google-cloud-storage"
+    "google-cloud-storage",
+    "psutil"
   ]
   long_description = long_description,
   long_description_content_type = "text/markdown",

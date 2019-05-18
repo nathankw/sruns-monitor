@@ -8,10 +8,13 @@
 import json
 from multiprocessing import Process, Queue
 import os
+import signal
+import sys
 import tarfile
 import time
 
 from google.cloud import storage
+import psutil
 
 storage_client = storage.Client()
 
@@ -27,11 +30,27 @@ class Monitor:
     #: downstream processing (i.e. the Illumina NovaSeq has finished writing to the folder).
     #: The sential file can vary by sequencing platform. For NovaSeq, can use CopyComplete.txt.
     SENTINAL_FILES = set(["CopyComplete.txt"])
+    #: File that contains the name of currnet process ID.
 
     def __init__(self, conf_file):
         self.conf = json.load(open(conf_file))
         self.state = Queue() # Must pass in manually to Process constructors
-        self.bucket = storage_client.get_bucket(self.conf.gcp_bucket.name)
+        self.bucket = storage_client.get_bucket(self.conf["gcp_bucket"]["name"])
+        #signal.signal(signal.SIGTERM, Monitor._cleanup)
+        signal.signal(signal.SIGINT, Monitor._cleanup)
+        signal.signal(signal.SIGTERM, Monitor._cleanup)
+
+    @staticmethod
+    def _cleanup(signum, frame):
+        """
+        Terminate all child processes. Normally this is called when a SIGTERM is caught.
+        """
+        print("Cleaning up")
+        print(signum)
+        pid = os.getpid()
+        child_processes = psutil.Process().children()
+        [c.kill() for c in child_processes]
+        sys.exit(128 + signum)
 
     def scan(self):
         for rundir in os.listdir(self.conf.location):
@@ -40,6 +59,7 @@ class Monitor:
             if set(os.listdir(rundir)).intersection(self.SENTINAL_FILES):
                 # This is a completed run directory
                 p = Process(target=self.p_tar_and_upload, args=(self.state, rundir))
+                p.start()
 
     def child(self, state):
         try:
@@ -52,29 +72,34 @@ class Monitor:
             state.put((os.getpid(), e))
 
     def p_tar_and_upload(self, state, rundir):
-        pid = os.getpid()
         try:
-            print(b)
             tarball = utils.tar(rundir)
             # Upload tarball to GCP bucket
             blob_name = "/".join(os.path.basename(rundir), os.path.basename(tarball))
             utils.upload_to_gcp(bucket=self.bucket, blob_name=blob_name, source_file=tarball)
-            
-        except Exception as e
+        except Exception as e:
             print("error")
             state.put((pid, e))
+            # Let child process terminate as it would have so this error is spit out into
+            # any potential downstream loggers as well. This does not effect the mani thread. 
             raise
-        pass
 
     def start(self):
+        # Make sure this wasn't restarted and left orphaned processes. 
+        self.cleanup()
+        try:
+            while True:
+                self.scan()
+                data = self.state.get(block=False)
+                if data:
+                    pid = data[0]
+                    msg = data[1]
+                    print("Process {} exited with message '{}'.".format(pid, msg))
+                time.sleep(m.conf.cycle_pause)
+        except Exception as e:
+            pass
+    def test(self):
+        print(__package__)
+        print("Starting as ", os.getpid())
         while True:
-            self.scan()
-            data = self.state.get(block=False)
-            if data:
-                pid = data[0]
-                msg = data[1]
-                print("Process {} exited with message '{}'.".format(pid, msg))
-            time.sleep(m.conf.cycle_pause)
-
-#m = Monitor(conf_file="conf.json")
-#m.start()
+            time.sleep(10)
