@@ -16,9 +16,10 @@ import time
 from google.cloud import storage
 import psutil
 
-storage_client = storage.Client()
-
 import sruns_monitor.utils as utils
+from sruns_monitor.sqlite_utils import Db
+
+storage_client = storage.Client()
 
 class Monitor:
     """
@@ -39,6 +40,7 @@ class Monitor:
         #signal.signal(signal.SIGTERM, Monitor._cleanup)
         signal.signal(signal.SIGINT, Monitor._cleanup)
         signal.signal(signal.SIGTERM, Monitor._cleanup)
+        self.db = Db(self.conf["sqlite_db"])
 
     @staticmethod
     def _cleanup(signum, frame):
@@ -53,13 +55,24 @@ class Monitor:
         sys.exit(128 + signum)
 
     def scan(self):
-        for rundir in os.listdir(self.conf.location):
+        for rundir in os.listdir(self.conf["location"]):
             if not os.path.isdir(rundir):
                 continue
-            if set(os.listdir(rundir)).intersection(self.SENTINAL_FILES):
+            rundir_path = os.path.join(self.conf["location"], rundir)
+            if set(os.listdir(rundir_path)).intersection(self.SENTINAL_FILES):
                 # This is a completed run directory
-                p = Process(target=self.p_tar_and_upload, args=(self.state, rundir))
-                p.start()
+                run_status = self.db.get_run_status(rundir)
+                if run_status == self.db.RUN_STATUSES["new"]
+                    p = Process(target=self.p_tar_and_upload, args=(self.state, rundir))
+                    p.start()
+                    # Insert record into sqlite db
+                    self.db.insert_run(name=rundir, pid=p.pid, tar_status=False, upload_status=False)
+                elif run_status == self.db.RUN_STATUSES["complete"]:
+                    move_to_path = os.path.join(self.conf["completed_runs_dir"], rundir)
+                    os.rename(rundir_path, move_to_path)
+                    # Update db record
+                elif run_status == self.db.RUN_STATUSES["running"]:
+                    pass
 
     def child(self, state):
         try:
@@ -81,11 +94,11 @@ class Monitor:
             print("error")
             state.put((pid, e))
             # Let child process terminate as it would have so this error is spit out into
-            # any potential downstream loggers as well. This does not effect the mani thread. 
+            # any potential downstream loggers as well. This does not effect the mani thread.
             raise
 
     def start(self):
-        # Make sure this wasn't restarted and left orphaned processes. 
+        # Make sure this wasn't restarted and left orphaned processes.
         self.cleanup()
         try:
             while True:
@@ -95,11 +108,44 @@ class Monitor:
                     pid = data[0]
                     msg = data[1]
                     print("Process {} exited with message '{}'.".format(pid, msg))
-                time.sleep(m.conf.cycle_pause)
+                time.sleep(m.conf["cycle_pause"])
         except Exception as e:
             pass
+
     def test(self):
         print(__package__)
         print("Starting as ", os.getpid())
         while True:
             time.sleep(10)
+
+    def get_run_status(self, name):
+        rec = self.db.get_run(name)
+        if not rec:
+            return self.db.RUN_STATUSES["new"]
+        elif rec[self.db.TASKS_TAR_STATUS] and rec[self.db.TASKS_UPLOAD_STATUS]:
+            return self.db.RUN_STATUSES["complete"]
+        pid = rec[self.db.TASKS_PID]
+        # Check if running
+        try:
+            process = psutil.Process(pid)
+            # Add check to make sure process hasn't been running for more than a configured
+            # amount of time.
+            created_at = process.create_time() # Seconds since epoch
+            process_age_hours = (time.time.now() - created_at)/3600
+            if process_age_hours > self.conf["process_runtime_terminate"]:
+                # terminate process
+                p.kill()
+                # Send email notification
+                return self.check_task_to_run(rec)
+            elif process_age_hours > self.conf["process_runtime_warning"]:
+                # Send email notification
+                pass
+            return self.db.RUN_STATUSES["running"]
+        except psutil.NoSuchProcess:
+            return self.check_task_to_run(rec) 
+
+    def check_task_to_run(self, rec):
+        if not rec[self.db.TASKS_TAR_STATUS]:
+            return self.db.RUN_STATUSES["start_tar"]
+        elif not rec[self.db.TASKS_UPLOAD_STATUS]:
+            return self.db.RUN_STATUSES["start_upload"]
