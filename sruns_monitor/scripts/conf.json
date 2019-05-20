@@ -1,5 +1,6 @@
 
 {
+  "sqlite_db": "test.db",
   "gcp_bucket": {
       "name": "nathankw-testcgs"
   },

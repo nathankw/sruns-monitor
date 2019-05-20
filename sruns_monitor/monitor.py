@@ -21,6 +21,9 @@ from sruns_monitor.sqlite_utils import Db
 
 storage_client = storage.Client()
 
+class MissingTarfile(Exception):
+    pass
+
 class Monitor:
     """
     Requires a configuration file in JSON format with settings regarding what folder to monitor
@@ -54,24 +57,27 @@ class Monitor:
         [c.kill() for c in child_processes]
         sys.exit(128 + signum)
 
+    def get_rundir_path(self, run_name):
+        return os.path.join(self.conf["location"], run_name)
+
     def scan(self):
-        for rundir in os.listdir(self.conf["location"]):
-            if not os.path.isdir(rundir):
+        for run_name in os.listdir(self.conf["location"]):
+            if not os.path.isdir(run_name):
                 continue
-            rundir_path = os.path.join(self.conf["location"], rundir)
+            rundir_path = self.get_rundir_path(run_name)
             if set(os.listdir(rundir_path)).intersection(self.SENTINAL_FILES):
                 # This is a completed run directory
-                run_status = self.db.get_run_status(rundir)
-                if run_status == self.db.RUN_STATUSES["new"]
-                    p = Process(target=self.p_tar_and_upload, args=(self.state, rundir))
+                run_status = self.db.get_run_status(run_name)
+                if run_status == self.db.RUN_STATUS_NEW:
+                    p = Process(target=self.p_tar_and_upload, args=(self.state, run_name))
                     p.start()
                     # Insert record into sqlite db
-                    self.db.insert_run(name=rundir, pid=p.pid, tar_status=False, upload_status=False)
-                elif run_status == self.db.RUN_STATUSES["complete"]:
-                    move_to_path = os.path.join(self.conf["completed_runs_dir"], rundir)
+                    selfb.insert_run(name=run_name, pid=p.pid, tarfile="", upload_status=False)
+                elif run_status == self.db.RUN_STATUS_COMPLETE:
+                    move_to_path = os.path.join(self.conf["completed_runs_dir"], run_name)
                     os.rename(rundir_path, move_to_path)
                     # Update db record
-                elif run_status == self.db.RUN_STATUSES["running"]:
+                elif run_status == self.db.RUN_STATUS_RUNNING:
                     pass
 
     def child(self, state):
@@ -84,17 +90,34 @@ class Monitor:
             print("error")
             state.put((os.getpid(), e))
 
-    def p_tar_and_upload(self, state, rundir):
+    def task_tar(self, state,  run_name):
+        rundir_path = self.get_rundir_path(run_name)
+        tarball_name = rundir_path + ".tar.gz"
         try:
-            tarball = utils.tar(rundir)
-            # Upload tarball to GCP bucket
-            blob_name = "/".join(os.path.basename(rundir), os.path.basename(tarball))
-            utils.upload_to_gcp(bucket=self.bucket, blob_name=blob_name, source_file=tarball)
+            tarball = utils.tar(rundir_path, tarball_name)
+            self.db.update_run(name=run_name, payload={self.Db.TASKS_TARFILE: tarball_name})
         except Exception as e:
             print("error")
             state.put((pid, e))
             # Let child process terminate as it would have so this error is spit out into
-            # any potential downstream loggers as well. This does not effect the mani thread.
+            # any potential downstream loggers as well. This does not effect the main thread.
+            raise
+
+    def task_upload(self, state, run_name):
+        try:
+            rec = self.db.get_run(run_name)
+            tarfile = rec[self.Db.TASKS_TARFILE] 
+            if not tarfile:
+                raise MissingTarfile("Run {} does not have a tarfile.".format(run_name))     
+            # Upload tarfile to GCP bucket
+            blob_name = "/".join(run_name, os.path.basename(tarfile))
+            utils.upload_to_gcp(bucket=self.bucket, blob_name=blob_name, source_file=tarfile)
+            self.db.update_run(name=run_name, payload={self.Db.TASKS_BUCKET_TARFILE: blob_name})
+        except Exception as e:
+            print("error")
+            state.put((pid, e))
+            # Let child process terminate as it would have so this error is spit out into
+            # any potential downstream loggers as well. This does not effect the main thread.
             raise
 
     def start(self):
@@ -119,12 +142,22 @@ class Monitor:
             time.sleep(10)
 
     def get_run_status(self, name):
+        """
+        Determines the state of the workflow for a given run based on the run record in the
+        database.
+
+        Returns:
+            `str`. One of the RUN_STATUS_* constants defined in the class `sruns_monitor.sqlite_utils.Db`.
+        """
+        # Check for record in database
         rec = self.db.get_run(name)
         if not rec:
-            return self.db.RUN_STATUSES["new"]
-        elif rec[self.db.TASKS_TAR_STATUS] and rec[self.db.TASKS_UPLOAD_STATUS]:
-            return self.db.RUN_STATUSES["complete"]
+            return self.db.RUN_STATUS_NEW
+        elif rec[self.db.TASKS_TARFILE] and rec[self.db.TASKS_BUCKET_TARFILE]:
+            return self.db.RUN_STATUS_COMPLETE
         pid = rec[self.db.TASKS_PID]
+        if not pid:
+            return self.check_task_to_run(rec)
         # Check if running
         try:
             process = psutil.Process(pid)
@@ -136,16 +169,22 @@ class Monitor:
                 # terminate process
                 p.kill()
                 # Send email notification
-                return self.check_task_to_run(rec)
-            elif process_age_hours > self.conf["process_runtime_warning"]:
-                # Send email notification
-                pass
-            return self.db.RUN_STATUSES["running"]
+                if self.check_task_to_run(rec)
+            return self.db.RUN_STATUS_RUNNING
         except psutil.NoSuchProcess:
             return self.check_task_to_run(rec) 
 
     def check_task_to_run(self, rec):
-        if not rec[self.db.TASKS_TAR_STATUS]:
-            return self.db.RUN_STATUSES["start_tar"]
-        elif not rec[self.db.TASKS_UPLOAD_STATUS]:
-            return self.db.RUN_STATUSES["start_upload"]
+        if not rec[self.db.TASKS_TARFILE]:
+            return self.db.RUN_STATUS_NEEDS_TAR
+        elif not rec[self.db.TASKS_BUCKET_TARFILE]:
+            return self.db.RUN_STATUS_NEEDS_UPLOAD
+        else:
+            return None
+
+    def restart(self, rec):
+        task = self.check_task_to_run(rec):
+        if not task:
+            return
+        
+  
