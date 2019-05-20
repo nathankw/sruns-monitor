@@ -6,6 +6,7 @@
 ###
 
 import json
+import logging
 from multiprocessing import Process, Queue
 import os
 import signal
@@ -16,6 +17,7 @@ import time
 from google.cloud import storage
 import psutil
 
+import sruns_monitor as srm
 import sruns_monitor.utils as utils
 from sruns_monitor.sqlite_utils import Db
 
@@ -43,6 +45,20 @@ class Monitor:
         #signal.signal(signal.SIGTERM, Monitor._cleanup)
         signal.signal(signal.SIGINT, Monitor._cleanup)
         signal.signal(signal.SIGTERM, Monitor._cleanup)
+        self.db = Db(self.conf["sqlite_db"])
+
+        #: A reference to the `debug` logging instance that was created earlier in ``sruns_monitor.debug_logger``.
+        #: This class adds a file handler, such that all messages sent to it are logged to this
+        #: file in addition to STDOUT.
+        self.debug_logger = logging.getLogger(srm.DEBUG_LOGGER_NAME)
+        # Add debug file handler to debug_logger:
+        utils.add_file_handler(logger=self.debug_logger, level=logging.DEBUG, tag="debug")
+
+        #: A ``logging`` instance with a file handler for logging terse error messages.
+        #: The log file resides locally within the directory specified by the constant
+        #: ``connection.LOG_DIR``. Accepts messages >= ``logging.ERROR``.
+        self.error_logger = logging.getLogger(srm.ERROR_LOGGER_NAME)
+        utils.add_file_handler(logger=self.error_logger, level=logging.ERROR, tag="error")
         self.db = Db(self.conf["sqlite_db"])
 
     @staticmethod
@@ -104,11 +120,19 @@ class Monitor:
             raise
 
     def task_upload(self, state, run_name):
+        """
+        Uploads the tarred run dirctory to GCP Storage. The blob is named as /run_name/tarfile,
+        where run_name is the squencing run name, and tarfile is the name of the tarfile.
+
+        Raises:
+            `MissingTarfile`: There isn't a tarfile for this run (based on the record information
+            in self.Db.
+        """
         try:
             rec = self.db.get_run(run_name)
-            tarfile = rec[self.Db.TASKS_TARFILE] 
+            tarfile = rec[self.Db.TASKS_TARFILE]
             if not tarfile:
-                raise MissingTarfile("Run {} does not have a tarfile.".format(run_name))     
+                raise MissingTarfile("Run {} does not have a tarfile.".format(run_name))
             # Upload tarfile to GCP bucket
             blob_name = "/".join(run_name, os.path.basename(tarfile))
             utils.upload_to_gcp(bucket=self.bucket, blob_name=blob_name, source_file=tarfile)
@@ -169,10 +193,11 @@ class Monitor:
                 # terminate process
                 p.kill()
                 # Send email notification
-                if self.check_task_to_run(rec)
+                if self.check_task_to_run(rec):
+                    pass
             return self.db.RUN_STATUS_RUNNING
         except psutil.NoSuchProcess:
-            return self.check_task_to_run(rec) 
+            return self.check_task_to_run(rec)
 
     def check_task_to_run(self, rec):
         if not rec[self.db.TASKS_TARFILE]:
@@ -183,8 +208,8 @@ class Monitor:
             return None
 
     def restart(self, rec):
-        task = self.check_task_to_run(rec):
+        task = self.check_task_to_run(rec)
         if not task:
             return
-        
-  
+
+

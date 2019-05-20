@@ -1,7 +1,47 @@
+import logging
 import os
 import tarfile
 
 import pdb
+
+import sruns_monitor as srm
+
+def get_logfile_name(tag):
+    """
+    Creates a name for a log file that is meant to be used in a call to
+    ``logging.FileHandler``. The log file name will incldue the path to the log directory given
+    by the ``sruns_monitor.LOG_DIR`` constant. The format of the file name is: 'log_$TAG.txt', where 
+    $TAG is the value of the 'tag' argument. The log directory will be created if need be.
+
+    Args:
+        tag: `str`. A tag name to add to at the end of the log file name for clarity on the
+            log file's purpose.
+    """
+    if not os.path.exists(srm.LOG_DIR):
+        os.mkdir(srm.LOG_DIR)
+    filename = "log_srm_" + tag + ".txt"
+    filename = os.path.join(srm.LOG_DIR, filename)
+    return filename
+
+def add_file_handler(logger, level, tag):
+    """
+    Adds a ``logging.FileHandler`` handler to the specified ``logging`` instance that will log
+    the messages it receives at the specified error level or greater.  The log file will be named
+    as outlined in ``get_logfile_name``.
+
+    Args:
+        logger: The `logging.Logger` instance to add the `logging.FileHandler` to.
+        level:  `int`. A logging level (i.e. given by one of the constants `logging.DEBUG`,
+            `logging.INFO`, `logging.WARNING`, `logging.ERROR`, `logging.CRITICAL`).
+        tag: `str`. A tag name to add to at the end of the log file name for clarity on the
+            log file's purpose.
+    """
+    f_formatter = logging.Formatter('%(asctime)s:%(name)s:\t%(message)s')
+    filename = get_logfile_name(tag)
+    handler = logging.FileHandler(filename=filename, mode="a")
+    handler.setLevel(level)
+    handler.setFormatter(f_formatter)
+    logger.addHandler(handler)
 
 def tar(input_dir, tarball_name):
     """
@@ -10,7 +50,7 @@ def tar(input_dir, tarball_name):
 
     Args:
         input_dir: `str`. Path to the directory to tar up.
-        tarball_name: `str`. Name of the output tarball. 
+        tarball_name: `str`. Name of the output tarball.
 
     Returns:
         `None`.
@@ -36,7 +76,7 @@ def upload_to_gcp(bucket, blob_name, source_file):
         `None`.
 
     Raises:
-        `FileNotFoundError`: source_file was not locally found. 
+        `FileNotFoundError`: source_file was not locally found.
     """
     blob = bucket.blob(blob_name)
     return blob.upload_from_filename(source_file)
