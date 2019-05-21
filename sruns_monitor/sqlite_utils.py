@@ -16,6 +16,7 @@ class Db:
     RUN_STATUS_NEW = "new"
     RUN_STATUS_COMPLETE = "complete"
     RUN_STATUS_RUNNING = "running"
+    RUN_STATUS_NOT_RUNNING = "not_running"
     RUN_STATUS_NEEDS_TAR = "start_tar"
     RUN_STATUS_NEEDS_UPLOAD = "start_upload"
     TASKS_TABLE_NAME = "tasks"
