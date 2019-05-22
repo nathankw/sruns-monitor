@@ -114,7 +114,8 @@ class Monitor:
         # email notification
         pid = os.getpid()
         child_processes = psutil.Process().children()
-        [c.kill() for c in child_processes]
+        # Kill child processes by sending a SIGKILL.
+        [c.kill() for c in child_processes] # equiv. to os.kill(pid, signal.SIGKILL) on UNIX. 
         sys.exit(128 + signum)
 
     def get_rundir_path(self, run_name):
@@ -301,6 +302,10 @@ class Monitor:
     def start(self):
         try:
             while True:
+                # Remove any zombie processes
+                # Curious why or how this works? See book Programming Python, 4th ed. section
+                # "Killing the zombies: Don't fear the reaper!".
+                os.waitpid(0, os.WNOHANG)
                 finished_rundirs = self.scan()
                 self.process_rundirs(run_names=finished_rundirs)
                 data = self.state.get(block=False)
