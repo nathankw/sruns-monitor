@@ -1,3 +1,5 @@
+# -*- coding: utf-8 -*-
+
 import logging
 import os
 import sys
@@ -27,3 +29,14 @@ debug_logger.addHandler(ch)
 #: A ``logging`` instance that accepts messages at the ERROR level.
 error_logger = logging.getLogger(ERROR_LOGGER_NAME)
 error_logger.setLevel(logging.ERROR)
+
+#: The JSON Schema file that defines the properties of the configuration file.
+CONF_SCHEMA = os.path.join(os.path.dirname(__file__), "schema.json")
+#: Configuration parameter names in conf.json
+C_WATCHDIR = "watchdir"
+C_COMPLETED_RUNS_DIR = "completed_runs_dir"
+C_SQLITE_DB = "sqlite_db"
+C_GCP_BUCKET_NAME = "gcp_bucket_name"
+C_GCP_BUCKET_BASEDIR = "gcp_bucket_basedir"
+C_CYCLE_PAUSE_SEC = "cycle_pause_sec"
+C_TASK_RUNTIME_LIMIT_SEC = "task_runtime_limit_sec"

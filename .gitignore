@@ -2,3 +2,5 @@
 *.pyc
 *.swp
 **Log_SRUNS_Monitor
+**__pycache__
+**tmp

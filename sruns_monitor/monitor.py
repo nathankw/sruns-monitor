@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 
 ###
 # Nathaniel Watson
@@ -6,6 +7,7 @@
 ###
 
 import json
+import jsonschema
 import logging
 from multiprocessing import Process, Queue
 import os
@@ -23,6 +25,9 @@ from sruns_monitor.sqlite_utils import Db
 
 storage_client = storage.Client()
 
+class ConfigException(Exception):
+    pass
+
 class MissingTarfile(Exception):
     pass
 
@@ -39,13 +44,36 @@ class Monitor:
     #: File that contains the name of currnet process ID.
 
     def __init__(self, conf_file):
-        self.conf = json.load(open(conf_file))
+        self.conf = self._validate_conf(conf_file)
+        self.watchdir = self.conf[srm.C_WATCHDIR]
+        if not os.path.exists(self.watchdir):
+            raise ConfigException("'watchdir' is a required property and the referenced directory must exist.".format(self.watchdir))
+        self.completed_runs_dir = self.conf.get(srm.C_COMPLETED_RUNS_DIR)
+        if not os.path.exists(self.completed_runs_dir):
+            os.mkdir(self.completed_runs_dir)
+        #: The number of seconds to wait between run directory scans. 
+        self.cycle_pause_sec = self.conf.get(srm.C_CYCLE_PAUSE_SEC, 60)
+        #: The number of seconds that a child process running the workflow is allowed to run, after
+        #: which the process will be killed. A value of 0 indicates that such a time limit will not
+        #: be observed.
+        self.process_runtime_limit_sec = self.conf.get(srm.C_TASK_RUNTIME_LIMIT_SEC, None)
+        #: A `multiprocessing.Queue` instance that a child process will write to in the event that 
+        #: an Exception is to occur within that process prior to re-raising the Exception and exiting. 
+        #: The main process will check this queue in each scan iteration to report any child processes
+        #: that have failed by means of logging and email notification. 
         self.state = Queue() # Must pass in manually to Process constructors
-        self.bucket = storage_client.get_bucket(self.conf["gcp_bucket"]["name"])
+        #: The GCP Storage bucket in which tarred run directories will be stored.
+        self.bucket = storage_client.get_bucket(self.conf[srm.C_GCP_BUCKET_NAME])
+        #: The directory in self.bucket in which to store tarred run directories. If not provided,
+        #: defaults to the root level directory. 
+        self.bucket_basedir = self.conf.get(srm.C_GCP_BUCKET_BASEDIR, "/")
         #signal.signal(signal.SIGTERM, Monitor._cleanup)
         signal.signal(signal.SIGINT, Monitor._cleanup)
         signal.signal(signal.SIGTERM, Monitor._cleanup)
-        self.db = Db(self.conf["sqlite_db"])
+        #: The sqlite database in which to store workflow status for a given run. If not provided,
+        #: defaults to 'sruns.db'. See `sruns_monitor.sqlite_utils.Db` for more details on the 
+        #: structure of records in this database. 
+        self.db = Db(self.conf.get(srm.C_SQLITE_DB, "sruns.db"))
 
         #: A reference to the `debug` logging instance that was created earlier in ``sruns_monitor.debug_logger``.
         #: This class adds a file handler, such that all messages sent to it are logged to this
@@ -59,10 +87,20 @@ class Monitor:
         #: ``connection.LOG_DIR``. Accepts messages >= ``logging.ERROR``.
         self.error_logger = logging.getLogger(srm.ERROR_LOGGER_NAME)
         utils.add_file_handler(logger=self.error_logger, level=logging.ERROR, tag="error")
-        self.db = Db(self.conf["sqlite_db"])
+
+    def _validate_conf(self, conf_file):
+        """
+        Args:
+            conf_file: `str`. The JSON configuration file.
+        """
+        jconf = json.load(open(conf_file))
+        jschema = json.load(open(srm.CONF_SCHEMA))
+        jsonschema.validate(jconf, jschema)
+        return jconf
+            
 
     @staticmethod
-    def _cleanup(signum=None, frame=None):
+    def _cleanup(signum, frame):
         """
         Terminate all child processes. Normally this is called when a SIGTERM is caught
 
@@ -72,13 +110,15 @@ class Monitor:
             frame: Don't call explicitly. Only used internally when this method is serving as a
                 handler for a specific type of signal in the funtion `signal.signal`. 
         """
-        if signum:
-            self.error_logger.error("Caught signal {signum}. Preparing for shutdown.".format(signum))
-            # email notification
+        self.error_logger.error("Caught signal {signum}. Preparing for shutdown.".format(signum))
+        # email notification
         pid = os.getpid()
         child_processes = psutil.Process().children()
         [c.kill() for c in child_processes]
         sys.exit(128 + signum)
+
+    def get_rundir_path(self, run_name):
+        return os.path.join(self.watchdir, run_name)
 
     def _workflow(self, state, run_name):
         """
@@ -101,22 +141,22 @@ class Monitor:
         if not rec[self.db.TASKS_GCP_TARFILE]:        
             self.task_upload(state=state, run_name=run_name)
 
-    def get_rundir_path(self, run_name):
-        return os.path.join(self.conf["location"], run_name)
-
-    def check_task_to_run(self, rec):
-        if not rec[self.db.TASKS_TARFILE]:
-            return self.db.RUN_STATUS_NEEDS_TAR
-        elif not rec[self.db.TASKS_GCP_TARFILE]:
-            return self.db.RUN_STATUS_NEEDS_UPLOAD
-        else:
-            return None
-
     def task_tar(self, state,  run_name):
+        """
+        Creates a gzip tarfile of the run directory. The tarfile will be created in the directory
+        being watched (`self.watchdir`) and named the same as the `run_name` parameter, but with
+        a .tar.gz suffix.
+
+        Once tarring is complete, the database record is updated to set the path to the tarfile. 
+
+        Args:
+            state: `multiprocessing.Queue` instance. 
+            run_name: `str`. The name of a sequencing run. 
+        """
         rundir_path = self.get_rundir_path(run_name)
         tarball_name = rundir_path + ".tar.gz"
         try:
-            self.db.update_run(name=run_name, payload={self.Db.TASKS_PID: os.getpid())
+            self.db.update_run(name=run_name, payload={self.Db.TASKS_PID: os.getpid()})
             tarball = utils.tar(rundir_path, tarball_name)
             self.db.update_run(name=run_name, payload={self.Db.TASKS_TARFILE: tarball_name})
         except Exception as e:
@@ -127,8 +167,16 @@ class Monitor:
 
     def task_upload(self, state, run_name):
         """
-        Uploads the tarred run dirctory to GCP Storage. The blob is named as /run_name/tarfile,
-        where run_name is the squencing run name, and tarfile is the name of the tarfile.
+        Uploads the tarred run dirctory to GCP Storage in the directory specified by `self.bucket_basedir`.
+        The blob is named as $basedir/run_name/tarfile, where run_name is the squencing run name, 
+        and tarfile is the name of the tarfile produced by `self.task_tar`. 
+
+        Once uploading is complete, the database record is updated to set the path to the blob in
+        the GCP bucket.
+
+        Args:
+            state: `multiprocessing.Queue` instance. 
+            run_name: `str`. The name of a sequencing run. 
 
         Raises:
             `MissingTarfile`: There isn't a tarfile for this run (based on the record information
@@ -140,7 +188,7 @@ class Monitor:
             if not tarfile:
                 raise MissingTarfile("Run {} does not have a tarfile.".format(run_name))
             # Upload tarfile to GCP bucket
-            blob_name = "/".join(run_name, os.path.basename(tarfile))
+            blob_name = "/".join(self.bucket_basedir, run_name, os.path.basename(tarfile))
             utils.upload_to_gcp(bucket=self.bucket, blob_name=blob_name, source_file=tarfile)
             self.db.update_run(name=run_name, payload={self.Db.TASKS_GCP_TARFILE: blob_name})
         except Exception as e:
@@ -155,16 +203,21 @@ class Monitor:
         while True:
             time.sleep(10)
 
-    def get_run_status(self, name):
+    def get_run_status(self, run_name):
         """
         Determines the state of the workflow for a given run based on the run record in the
-        database.
+        database. This method has a potential side effect: If the workflow is running and the child
+        process encapsulating it has been running longer than a configurable number of seconds, then
+        this method will kill that child process prior to returning the run status. 
+
+        Args:
+            run_name: `str`. The name of a sequencing run. 
 
         Returns:
             `str`. One of the RUN_STATUS_* constants defined in the class `sruns_monitor.sqlite_utils.Db`.
         """
         # Check for record in database
-        rec = self.db.get_run(name)
+        rec = self.db.get_run(run_name)
         if not rec:
             return self.db.RUN_STATUS_NEW
         elif rec[self.db.TASKS_TARFILE] and rec[self.db.TASKS_GCP_TARFILE]:
@@ -184,9 +237,6 @@ class Monitor:
             return self.db.RUN_STATUS_RUNNING
         except psutil.NoSuchProcess:
             return self.db.RUN_STATUS_NOT_RUNNING
-        
-        else:
-            return self.db.RUN_STATUS_HAS_PID
 
     def running_too_long(self, process):
         """
@@ -204,51 +254,66 @@ class Monitor:
         """
         # Add check to make sure process hasn't been running for more than a configured
         # amount of time.
+        if not self.process_runtime_limit_sec:
+            return False
         created_at = process.create_time() # Seconds since epoch
-        process_age_hours = (time.time.now() - created_at)/3600
-        if process_age_hours > self.conf["process_runtime_terminate"]:
+        process_age = (time.time() - created_at)
+        if process_age > self.process_runtime_limit_sec:
             return True
         return False
 
-    def scan(self, watch_dir):
-        for run_name in os.listdir(wath_dir):
-            if not os.path.isdir(run_name):
-                continue
+    def scan(self):
+        """
+        Finds all sequencing run in `self.watchdir` that are finished sequencing.
+        """
+        run_names = []
+        for run_name in os.listdir(self.watchdir):
             rundir_path = self.get_rundir_path(run_name)
+            if not os.path.isdir(rundir_path):
+                continue
             if set(os.listdir(rundir_path)).intersection(self.SENTINAL_FILES):
                 # This is a completed run directory
-                run_status = self.db.get_run_status(run_name)
-                if run_status == self.db.RUN_STATUS_NEW:
-                    # Insert record into sqlite db
-                    self.db.insert_run(name=run_name)
-                    p = Process(target=self._workflow, args=(self.state, run_name))
-                    p.start()
-                elif run_status == self.db.RUN_STATUS_COMPLETE:
-                    move_to_path = os.path.join(self.conf["completed_runs_dir"], run_name)
-                    self.debug_logger.debug("Moving run {run} to completed runs location {loc}.".format(run=run_name, move_to_path))
-                    os.rename(rundir_path, move_to_path)
-                elif run_status == self.db.RUN_STATUS_RUNNING:
-                    pass
-                elif run_status == self.db.RUN_STATUS_NOT_RUNNING
-                    p = Process(target=self._workflow, args=(self.state, run_name))
-                    p.start()
+                run_names.append(run_name)
+        return run_names
+
+    def process_rundirs(self, run_names):
+        """
+        For each sequencing run name, checks it's status with regard to the workflow and initiates
+        any remaining steps, i.e. restart, cleanup, ...
+        """
+        for run_name in run_names:
+            run_status = self.db.get_run_status(run_name)
+            if run_status == self.db.RUN_STATUS_NEW:
+                # Insert record into sqlite db
+                self.db.insert_run(name=run_name)
+                p = Process(target=self._workflow, args=(self.state, run_name))
+                p.start()
+            elif run_status == self.db.RUN_STATUS_COMPLETE:
+                move_to_path = os.path.join(self.completed_runs_dir, run_name)
+                self.debug_logger.debug("Moving run {run} to completed runs location {loc}.".format(run=run_name, loc=move_to_path))
+                os.rename(rundir_path, move_to_path)
+            elif run_status == self.db.RUN_STATUS_RUNNING:
+                pass
+            elif run_status == self.db.RUN_STATUS_NOT_RUNNING:
+                p = Process(target=self._workflow, args=(self.state, run_name))
+                p.start()
 
     def start(self):
-        # Make sure this wasn't restarted and left orphaned processes.
-        self._cleanup()
-        watch_dir = self.conf["location"] 
         try:
             while True:
-                self.scan(watch_dir=watch_dir)
+                finished_rundirs = self.scan()
+                self.process_rundirs(run_names=finished_rundirs)
                 data = self.state.get(block=False)
                 if data:
                     pid = data[0]
                     msg = data[1]
                     self.errog_logger.error("Process {} exited with message '{}'.".format(pid, msg))
                     # Email notification
-                time.sleep(m.conf["cycle_pause"])
+                time.sleep(self.cycle_pause_sec)
         except Exception as e:
-            pass
+            # Email notification
+            self.error_logger.error("Main process Exception: {}".format(e))
+            raise
 
 ### Example
 # m = Monitor(conf_file="my_conf_file.json")

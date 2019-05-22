@@ -1,9 +1,0 @@
-
-{
-  "sqlite_db": "test.db",
-  "gcp_bucket": {
-      "name": "nathankw-testcgs"
-  },
-  "location": "/some/path",
-  "cycle_pause": 60
-}

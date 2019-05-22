@@ -1,0 +1,13 @@
+
+{
+  "sqlite_db": "test.db",
+  "gcp_bucket": {
+      "name": "nathankw-testcgs",
+      "basedir": "/"
+  },
+  "watchdir": "/some/path",
+  "cycle_pause_sec": 60,
+  "tasks": {
+      "runtime_limit_hours": 24
+  }
+}

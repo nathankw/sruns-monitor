@@ -1,0 +1,16 @@
+{
+    "$schema": "http://json-schema.org/draft-04/schema#",
+    "type": "object",
+    "properties": {
+        "watchdir": { "type": "string" },
+        "completed_runs_dir": { "type": "string" },
+        "cycle_pause_sec": { "type": "integer" },
+        "task_runtime_limit_sec": { "type": "integer" },
+        "gcp_bucket_name": { "type": "string" },
+        "gcp_bucket_basedir": { "type": "string" },
+        "sqlite_db": { "type": "string" }
+    },
+    "additionalProperties": false,
+    "required": ["watchdir", "completed_runs_dir", "gcp_bucket_name"]
+}
+
