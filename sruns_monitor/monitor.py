@@ -157,11 +157,11 @@ class Monitor:
         rundir_path = self.get_rundir_path(run_name)
         tarball_name = rundir_path + ".tar.gz"
         try:
-            self.db.update_run(name=run_name, payload={self.Db.TASKS_PID: os.getpid()})
+            self.db.update_run(name=run_name, payload={self.db.TASKS_PID: os.getpid()})
             tarball = utils.tar(rundir_path, tarball_name)
-            self.db.update_run(name=run_name, payload={self.Db.TASKS_TARFILE: tarball_name})
+            self.db.update_run(name=run_name, payload={self.db.TASKS_TARFILE: tarball_name})
         except Exception as e:
-            state.put((pid, e))
+            state.put((os.getpid(), e))
             # Let child process terminate as it would have so this error is spit out into
             # any potential downstream loggers as well. This does not effect the main thread.
             raise
@@ -181,17 +181,17 @@ class Monitor:
 
         Raises:
             `MissingTarfile`: There isn't a tarfile for this run (based on the record information
-            in self.Db.
+            in self.db.
         """
         try:
             rec = self.db.get_run(run_name)
-            tarfile = rec[self.Db.TASKS_TARFILE]
+            tarfile = rec[self.db.TASKS_TARFILE]
             if not tarfile:
                 raise MissingTarfile("Run {} does not have a tarfile.".format(run_name))
             # Upload tarfile to GCP bucket
             blob_name = "/".join(self.bucket_basedir, run_name, os.path.basename(tarfile))
             utils.upload_to_gcp(bucket=self.bucket, blob_name=blob_name, source_file=tarfile)
-            self.db.update_run(name=run_name, payload={self.Db.TASKS_GCP_TARFILE: blob_name})
+            self.db.update_run(name=run_name, payload={self.db.TASKS_GCP_TARFILE: blob_name})
         except Exception as e:
             state.put((pid, e))
             # Let child process terminate as it would have so this error is spit out into

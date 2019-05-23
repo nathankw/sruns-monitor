@@ -114,6 +114,52 @@ class TestUtils(unittest.TestCase):
         status = self.monitor.get_run_status(run_name)
         self.assertEqual(status, self.monitor.db.RUN_STATUS_RUNNING)
 
+
+class TestTaskTar(unittest.TestCase):
+
+    def setUp(self):
+        self.monitor = Monitor(conf_file=CONF_FILE) 
+        self.run_name = "CompletedRun1" # An actual test run directory
+        self.tarfile_name = self.run_name + ".tar.gz"
+
+    def tearDown(self):
+        if os.path.exists(SQLITE_DB):
+            os.remove(SQLITE_DB)
+
+    def test_task_tar_pid_set(self):
+        """
+        Makes sure that when tarring a run directory, the pid of the child process is inserted into 
+        the database record.
+        """
+        self.monitor.db.insert_run(name=self.run_name)
+        self.monitor.task_tar(state=self.monitor.state, run_name=self.run_name) 
+        rec = self.monitor.db.get_run(name=self.run_name)
+        pid = rec[self.monitor.db.TASKS_PID]
+        self.assertTrue(pid > 0)
+
+    def test_task_tar_tarfile_set(self):
+        """
+        Makes sure that after tarring a run directory, the tarfile name is inserted into 
+        the database record.
+        """
+        self.monitor.db.insert_run(name=self.run_name)
+        self.monitor.task_tar(state=self.monitor.state, run_name=self.run_name) 
+        rec = self.monitor.db.get_run(name=self.run_name)
+        tarfile = rec[self.monitor.db.TASKS_TARFILE]
+        self.assertTrue(bool(tarfile))
+
+    def test_task_tar_tarfile_exists(self):
+        """
+        Makes sure that after tarring a run directory, the tarfile referenced in the database
+        record actually exists.
+        """
+        self.monitor.db.insert_run(name=self.run_name)
+        self.monitor.task_tar(state=self.monitor.state, run_name=self.run_name) 
+        rec = self.monitor.db.get_run(name=self.run_name)
+        tarfile = rec[self.monitor.db.TASKS_TARFILE]
+        self.assertTrue(os.path.exists(tarfile))
+
+
 class TestChildTasks(unittest.TestCase):
 
     def setUp(self):
