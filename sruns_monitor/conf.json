@@ -1,10 +1,9 @@
 
 {
   "sqlite_db": "test.db",
-  "gcp_bucket": {
-      "name": "nathankw-testcgs",
-      "basedir": "/"
-  },
+  "firestore_collection": "seq_runs",
+  "gcp_bucket_name": "nathankw-testcgs",
+  "gcp_bucket_basedir": "/",
   "watchdir": "/some/path",
   "cycle_pause_sec": 60,
   "tasks": {

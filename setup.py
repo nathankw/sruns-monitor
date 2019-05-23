@@ -35,6 +35,7 @@ setup(
   ],
   description = "Looks for new Illumina sequencing runs and tars them up into GCP storage"
   install_requires = [
+    "google-cloud-firestore",
     "google-cloud-storage",
     "jsonschema",
     "psutil"

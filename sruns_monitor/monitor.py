@@ -16,14 +16,13 @@ import sys
 import tarfile
 import time
 
-from google.cloud import storage
+from google.cloud import storage, firestore
+
 import psutil
 
 import sruns_monitor as srm
 import sruns_monitor.utils as utils
 from sruns_monitor.sqlite_utils import Db
-
-storage_client = storage.Client()
 
 class ConfigException(Exception):
     pass
@@ -45,6 +44,9 @@ class Monitor:
 
     def __init__(self, conf_file):
         self.conf = self._validate_conf(conf_file)
+        self.gcp_storage_client = storage.Client()
+        #: The Firestore collection, which should already exist. 
+        self.firestore_coll = firestore.Client().collection(self.conf["firestore_collection"])
         self.watchdir = self.conf[srm.C_WATCHDIR]
         if not os.path.exists(self.watchdir):
             raise ConfigException("'watchdir' is a required property and the referenced directory must exist.".format(self.watchdir))
@@ -63,7 +65,8 @@ class Monitor:
         #: that have failed by means of logging and email notification. 
         self.state = Queue() # Must pass in manually to Process constructors
         #: The GCP Storage bucket in which tarred run directories will be stored.
-        self.bucket = storage_client.get_bucket(self.conf[srm.C_GCP_BUCKET_NAME])
+        self.bucket_name = self.conf[srm.C_GCP_BUCKET_NAME]
+        self.bucket = self.gcp_storage_client.get_bucket(self.bucket_name)
         #: The directory in self.bucket in which to store tarred run directories. If not provided,
         #: defaults to the root level directory. 
         self.bucket_basedir = self.conf.get(srm.C_GCP_BUCKET_BASEDIR, "/")
@@ -172,8 +175,9 @@ class Monitor:
         The blob is named as $basedir/run_name/tarfile, where run_name is the squencing run name, 
         and tarfile is the name of the tarfile produced by `self.task_tar`. 
 
-        Once uploading is complete, the database record is updated to set the path to the blob in
-        the GCP bucket.
+        Once uploading is complete, the local database record is updated such that the attribute
+        `sqlite_utils.Db.TASKS_GCP_TARFILE` is set to the location of the blob as a string value
+        formatted as '$bucket_name/blob_path'. 
 
         Args:
             state: `multiprocessing.Queue` instance. 
@@ -191,7 +195,9 @@ class Monitor:
             # Upload tarfile to GCP bucket
             blob_name = "/".join(self.bucket_basedir, run_name, os.path.basename(tarfile))
             utils.upload_to_gcp(bucket=self.bucket, blob_name=blob_name, source_file=tarfile)
-            self.db.update_run(name=run_name, payload={self.db.TASKS_GCP_TARFILE: blob_name})
+            self.db.update_run(
+                name=run_name,
+                payload={self.db.TASKS_GCP_TARFILE: "/".join(self.bucket_name, blob_name)})
         except Exception as e:
             state.put((pid, e))
             # Let child process terminate as it would have so this error is spit out into
@@ -263,6 +269,39 @@ class Monitor:
             return True
         return False
 
+    def run_workflow(self, run_name):
+        p = Process(target=self._workflow, args=(self.state, run_name))
+        p.start()
+
+    def archive_run(self, run_name):
+        """
+        Moves the run directory to the completed runs directory.
+        """
+        from_path = self.get_rundir_path(run_name)
+        to_path = os.path.join(self.completed_runs_dir, run_name)
+        self.debug_logger.debug("Moving run {run} to completed runs location {loc}.".format(run=run_name, loc=to_path))
+        os.rename(from_path, to_path)
+
+    def process_new_run(self, run_name):
+        # Create record into sqlite db for local, workflow state tracking.
+        self.db.insert_run(name=run_name)
+        # Create Firestore document
+        firestore_payload = {
+            srm.FIRESTORE_ATTR_WF_STATUS: "processing",
+        }
+        self.firestore_coll.document(run_name).set(firestore_payload)
+        self.run_workflow(run_name)
+
+    def process_completed_run(self, run_name):
+        rec = self.db.get_run(run_name)
+        self.archive_run(run_name)
+        # Update Firestore record
+        firestore_payload = {
+            srm.FIRESTORE_ATTR_WF_STATUS: "complete",
+            srm.FIRESTORE_ATTR_STORAGE: rec[self.db.TASKS_GCP_TARFILE]
+        }
+        self.firestore_coll.document(run_name).update(firestore_payload)
+
     def scan(self):
         """
         Finds all sequencing run in `self.watchdir` that are finished sequencing.
@@ -285,19 +324,13 @@ class Monitor:
         for run_name in run_names:
             run_status = self.db.get_run_status(run_name)
             if run_status == self.db.RUN_STATUS_NEW:
-                # Insert record into sqlite db
-                self.db.insert_run(name=run_name)
-                p = Process(target=self._workflow, args=(self.state, run_name))
-                p.start()
+                self.process_new_run(run_name)
             elif run_status == self.db.RUN_STATUS_COMPLETE:
-                move_to_path = os.path.join(self.completed_runs_dir, run_name)
-                self.debug_logger.debug("Moving run {run} to completed runs location {loc}.".format(run=run_name, loc=move_to_path))
-                os.rename(rundir_path, move_to_path)
+                self.process_completed_run(run_name)
             elif run_status == self.db.RUN_STATUS_RUNNING:
                 pass
             elif run_status == self.db.RUN_STATUS_NOT_RUNNING:
-                p = Process(target=self._workflow, args=(self.state, run_name))
-                p.start()
+                self.run_workflow(run_name)
 
     def start(self):
         try:
