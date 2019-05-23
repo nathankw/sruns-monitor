@@ -14,18 +14,16 @@ DBG_LGR = logging.getLogger(srm.DEBUG_LOGGER_NAME)
 ERR_LGR = logging.getLogger(srm.ERROR_LOGGER_NAME)
 
 class Db:
-    RUNS_TABLE = "runs"
-    RUN_STATUS_NEW = "new"
-    RUN_STATUS_COMPLETE = "complete"
-    RUN_STATUS_RUNNING = "running"
-    RUN_STATUS_NOT_RUNNING = "not_running"
-    RUN_STATUS_NEEDS_TAR = "start_tar"
-    RUN_STATUS_NEEDS_UPLOAD = "start_upload"
+    #: The name of the table that stores workflow state for each sequencing run. 
     TASKS_TABLE_NAME = "tasks"
-    # tasks attribute names
+    #: 'tasks' table attribute name that stores the name of the sequencing run. 
     TASKS_NAME = "name"
+    #: 'tasks' table attribute name that stores the process ID of the workflow that is currently
+    #: running or had run.
     TASKS_PID = "pid"
+    #: 'tasks' table attribute name that stores the path to the gzip tarfile of the run directory.
     TASKS_TARFILE = "tarfile"
+    #: 'tasks' table attribute name that stores the path to the gzip tarfile in a GCP Storage bucket.
     TASKS_GCP_TARFILE = "gcp_tarfile"
 
     def __init__(self, dbname):

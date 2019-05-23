@@ -1,7 +1,7 @@
 
 {
   "sqlite_db": "test.db",
-  "firestore_collection": "seq_runs",
+  "firestore_collection": "sequencing_runs",
   "gcp_bucket_name": "nathankw-testcgs",
   "gcp_bucket_basedir": "/",
   "watchdir": "/some/path",

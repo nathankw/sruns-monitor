@@ -32,7 +32,8 @@ error_logger.setLevel(logging.ERROR)
 
 #: The JSON Schema file that defines the properties of the configuration file.
 CONF_SCHEMA = os.path.join(os.path.dirname(__file__), "schema.json")
-#: Configuration parameter names in conf.json
+#: Configuration parameter names in conf.json. Each of the variables that starts with a C_ denotes
+#: a config parameter. 
 C_WATCHDIR = "watchdir"
 C_COMPLETED_RUNS_DIR = "completed_runs_dir"
 C_SQLITE_DB = "sqlite_db"
