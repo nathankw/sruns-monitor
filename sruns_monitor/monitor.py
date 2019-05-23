@@ -113,6 +113,10 @@ class Monitor:
         jsonschema.validate(jconf, jschema)
         return jconf
 
+    def log_error(self, msg):
+        self.error_logger.error(msg)
+        self.debug_logger.debug(msg)
+
 
     @staticmethod
     def _cleanup(signum, frame):
@@ -125,7 +129,7 @@ class Monitor:
             frame: Don't call explicitly. Only used internally when this method is serving as a
                 handler for a specific type of signal in the funtion `signal.signal`.
         """
-        self.error_logger.error("Caught signal {signum}. Preparing for shutdown.".format(signum))
+        self.log_error(msg="Caught signal {signum}. Preparing for shutdown.".format(signum))
         # email notification
         pid = os.getpid()
         child_processes = psutil.Process().children()
@@ -251,11 +255,9 @@ class Monitor:
 
     def running_too_long(self, process):
         """
-        Clears the run record's pid attr if there isn't a running process with that pid. That way,
-        the workflow can be restarted for the run during the next iteration of the monitor.
-
-        Otherwise, if there is a running process, kills the process if it has been running for more
-        than a configurable amount of time, and sends out an email notification.
+        Indicates whether a child process has been running longer than a congifurable amount of time
+        that is set by the config variable identified by `sruns_monitor.C_TASK_RUNTIME_LIMIT_SEC`.
+        If that variable is not set, then this method always returns False. 
 
         Args:
            process: `psutil.Process` instance.
@@ -363,12 +365,12 @@ class Monitor:
                 if data:
                     pid = data[0]
                     msg = data[1]
-                    self.error_logger.error("Process {} exited with message '{}'.".format(pid, msg))
+                    self.log_error(msg="Process {} exited with message '{}'.".format(pid, msg))
                     # Email notification
                 time.sleep(self.cycle_pause_sec)
         except Exception as e:
             # Email notification
-            self.error_logger.error("Main process Exception: {}".format(e))
+            self.log_error(msg="Main process Exception: {}".format(e))
             raise
 
 ### Example
