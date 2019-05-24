@@ -83,9 +83,9 @@ class Monitor:
         #: The directory in `self.bucket` in which to store tarred run directories. If not provided,
         #: defaults to the root level directory.
         self.bucket_basedir = self.conf.get(srm.C_GCP_BUCKET_BASEDIR, "/")
-        #signal.signal(signal.SIGTERM, Monitor._cleanup)
-        signal.signal(signal.SIGINT, Monitor._cleanup)
-        signal.signal(signal.SIGTERM, Monitor._cleanup)
+        #signal.signal(signal.SIGTERM, self._cleanup)
+        signal.signal(signal.SIGINT, self._cleanup)
+        signal.signal(signal.SIGTERM, self._cleanup)
         #: The local sqlite database in which to store workflow status for a given run. If not provided,
         #: defaults to 'sruns.db'. See `sruns_monitor.sqlite_utils.Db` for more details on the
         #: structure of records in this database.
@@ -124,8 +124,7 @@ class Monitor:
         self.debug_logger.debug(msg)
 
 
-    @staticmethod
-    def _cleanup(signum, frame):
+    def _cleanup(self, signum, frame):
         """
         Terminate all child processes. Normally this is called when a SIGTERM is caught
 
@@ -135,7 +134,7 @@ class Monitor:
             frame: Don't call explicitly. Only used internally when this method is serving as a
                 handler for a specific type of signal in the funtion `signal.signal`.
         """
-        self.log_error(msg="Caught signal {signum}. Preparing for shutdown.".format(signum))
+        self.log_error(msg="Caught signal {}. Preparing for shutdown.".format(signum))
         # email notification
         pid = os.getpid()
         child_processes = psutil.Process().children()
@@ -184,7 +183,7 @@ class Monitor:
             with lock:
                 self.debug_logger.debug("Tarring sequencing run {}.".format(run_name))
             tarball = utils.tar(rundir_path, tarball_name)
-            self.db.update_run(name=un_name, payload={self.db.TASKS_TARFILE: tarball_name})
+            self.db.update_run(name=run_name, payload={self.db.TASKS_TARFILE: tarball_name})
         except Exception as e:
             state.put((os.getpid(), e))
             # Let child process terminate as it would have so this error is spit out into
@@ -215,15 +214,15 @@ class Monitor:
             if not tarfile:
                 raise MissingTarfile("Run {} does not have a tarfile.".format(run_name))
             # Upload tarfile to GCP bucket
-            blob_name = "/".join(self.bucket_basedir, run_name, os.path.basename(tarfile))
+            blob_name = "/".join([self.bucket_basedir, run_name, os.path.basename(tarfile)]).lstrip("/")
             with lock:
-                self.debug_logger.debug("Uploading {} to GCP Storage as {}.".format(tarfile, blob_name))
+                self.debug_logger.debug("Uploading {} to GCP Storage bucket {} as {}.".format(tarfile,self.bucket, blob_name))
             utils.upload_to_gcp(bucket=self.bucket, blob_name=blob_name, source_file=tarfile)
             self.db.update_run(
                 name=run_name,
-                payload={self.db.TASKS_GCP_TARFILE: "/".join(self.bucket_name, blob_name)})
+                payload={self.db.TASKS_GCP_TARFILE: "/".join([self.bucket_name, blob_name])})
         except Exception as e:
-            state.put((pid, e))
+            state.put((os.getpid(), e))
             # Let child process terminate as it would have so this error is spit out into
             # any potential downstream loggers as well. This does not effect the main thread.
             raise
@@ -353,7 +352,7 @@ class Monitor:
         """
         for run_name in run_names:
             self.debug_logger.debug("Processing rundir {}".format(run_name))
-            run_status = self.db.get_run_status(run_name)
+            run_status = self.get_run_status(run_name)
             if run_status == self.RUN_STATUS_NEW:
                 self.process_new_run(run_name)
             elif run_status == self.RUN_STATUS_COMPLETE:
@@ -366,6 +365,7 @@ class Monitor:
     def start(self):
         try:
             while True:
+                print("Cycle")
                 # Remove any zombie processes
                 # Curious why or how this works? See book Programming Python, 4th ed. section
                 # "Killing the zombies: Don't fear the reaper!".

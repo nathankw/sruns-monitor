@@ -51,7 +51,6 @@ class Db:
                        pid=self.TASKS_PID,
                        tarfile=self.TASKS_TARFILE,
                        gcp_tarfile=self.TASKS_GCP_TARFILE)
-
         self.curs.execute(create_table_sql)
 
     def insert_run(self, name, pid=0, tarfile="", gcp_tarfile=""):
