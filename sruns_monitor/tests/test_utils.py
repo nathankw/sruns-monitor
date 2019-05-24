@@ -38,16 +38,14 @@ class TestUtils(unittest.TestCase):
 
     def test_tar(self):
         """
-        Tests the function ``tar()`` for success. Calls the function to tar the test directory
-        in ./data/TEST_RUN_DIR, then checks whether the md5sum of the output tarball is equal to
-        the md5sum of ./data/test_run_dir.tar.gz (the latter of which was created with `tar -zcf`
-        command on Mac OS X. 
+        Tests the function `utils.tar()` for success. Calls the function to tar the test directory
+        at `self.test_rundir` and write the tarball to TMP_DIR. Then checks whether the md5sum of 
+        that output tarball is equal to the md5sum of a manually created tarball within WATCH_DIR.
         """
         output_file = os.path.join(TMP_DIR, self.test_rundir + ".tar.gz")
         utils.tar(input_dir=self.test_rundir, tarball_name=output_file)
         md5_output_file = self.get_md5sum(output_file)
-        md5_test_tarfile_rundir = self.get_md5sum(self.test_tarfile_rundir)
-        self.assertEqual(md5_output_file, md5_test_tarfile_rundir)
+        self.assertEqual(md5_output_file, self.get_md5sum(os.path.join(WATCH_DIR, "CompletedRun1.tar.gz")))
 
 
 

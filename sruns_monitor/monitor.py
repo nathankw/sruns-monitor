@@ -134,7 +134,8 @@ class Monitor:
             frame: Don't call explicitly. Only used internally when this method is serving as a
                 handler for a specific type of signal in the funtion `signal.signal`.
         """
-        self.log_error(msg="Caught signal {}. Preparing for shutdown.".format(signum))
+        signame = signal.Signals(signum).name
+        self.log_error(msg="Caught signal {}. Preparing for shutdown.".format(signame))
         # email notification
         pid = os.getpid()
         child_processes = psutil.Process().children()
