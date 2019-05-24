@@ -83,7 +83,6 @@ def upload_to_gcp(bucket, blob_name, source_file):
     Raises:
         `FileNotFoundError`: source_file was not locally found.
     """
-    DBG_LGR.debug("Uploading {} to {}.".format(source_file, blob_name)) 
     blob = bucket.blob(blob_name)
     return blob.upload_from_filename(source_file)
 

@@ -1,12 +1,11 @@
 
 {
+  "watchdir": "/some/path",
+  "completed_runs_dir": "/path/to/dir",
   "sqlite_db": "test.db",
   "firestore_collection": "sequencing_runs",
   "gcp_bucket_name": "nathankw-testcgs",
   "gcp_bucket_basedir": "/",
-  "watchdir": "/some/path",
   "cycle_pause_sec": 60,
-  "tasks": {
-      "runtime_limit_hours": 24
-  }
+  "task_runtime_limit_sec": 86400
 }

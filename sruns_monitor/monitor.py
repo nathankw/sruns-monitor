@@ -9,8 +9,9 @@
 import json
 import jsonschema
 import logging
-from multiprocessing import Process, Queue
+from multiprocessing import Process, Queue, Lock
 import os
+import queue
 import signal
 import sys
 import tarfile
@@ -73,6 +74,8 @@ class Monitor:
         #: The main process will check this queue in each scan iteration to report any child processes
         #: that have failed by means of logging and email notification.
         self.state = Queue() # Must pass in manually to multiprocessing.Process constructors.
+        #: A lock for safeguarding access to logging streams. 
+        self.lock = Lock() # Must pass in manually to multiprocessing.Process constructors 
         #: The GCP Storage bucket name in which tarred run directories will be stored.
         self.bucket_name = self.conf[srm.C_GCP_BUCKET_NAME]
         #: A `google.cloud.storage.bucket.Bucket` instance.
@@ -114,6 +117,9 @@ class Monitor:
         return jconf
 
     def log_error(self, msg):
+        """
+        Logs the provided message to the 'error' and 'debug' logging instances.
+        """
         self.error_logger.error(msg)
         self.debug_logger.debug(msg)
 
@@ -140,7 +146,7 @@ class Monitor:
     def get_rundir_path(self, run_name):
         return os.path.join(self.watchdir, run_name)
 
-    def _workflow(self, state, run_name):
+    def _workflow(self, state, lock, run_name):
         """
         Runs the workflow. Knows which stages to run, which is useful if the workflow needs to
         be rerun from a particular point.
@@ -155,11 +161,11 @@ class Monitor:
         self.db.update_run(name=run_name, payload={self.db.TASKS_PID: os.getpid()})
         rec = self.db.get_run(run_name)
         if not rec[self.db.TASKS_TARFILE]:
-            self.task_tar(state=state, run_name=run_name)
+            self.task_tar(state=state, run_name=run_name, lock=lock)
         if not rec[self.db.TASKS_GCP_TARFILE]:
-            self.task_upload(state=state, run_name=run_name)
+            self.task_upload(state=state, run_name=run_name, lock=lock)
 
-    def task_tar(self, state,  run_name):
+    def task_tar(self, state,  run_name, lock ):
         """
         Creates a gzip tarfile of the run directory. The tarfile will be created in the directory
         being watched (`self.watchdir`) and named the same as the `run_name` parameter, but with
@@ -175,6 +181,8 @@ class Monitor:
         rundir_path = self.get_rundir_path(run_name)
         tarball_name = rundir_path + ".tar.gz"
         try:
+            with lock:
+                self.debug_logger.debug("Tarring sequencing run {}.".format(run_name))
             tarball = utils.tar(rundir_path, tarball_name)
             self.db.update_run(name=un_name, payload={self.db.TASKS_TARFILE: tarball_name})
         except Exception as e:
@@ -183,7 +191,7 @@ class Monitor:
             # any potential downstream loggers as well. This does not effect the main thread.
             raise
 
-    def task_upload(self, state, run_name):
+    def task_upload(self, state, run_name, lock):
         """
         Uploads the tarred run dirctory to GCP Storage in the directory specified by `self.bucket_basedir`.
         The blob is named as $basedir/run_name/tarfile, where run_name is the squencing run name,
@@ -208,6 +216,8 @@ class Monitor:
                 raise MissingTarfile("Run {} does not have a tarfile.".format(run_name))
             # Upload tarfile to GCP bucket
             blob_name = "/".join(self.bucket_basedir, run_name, os.path.basename(tarfile))
+            with lock:
+                self.debug_logger.debug("Uploading {} to GCP Storage as {}.".format(tarfile, blob_name))
             utils.upload_to_gcp(bucket=self.bucket, blob_name=blob_name, source_file=tarfile)
             self.db.update_run(
                 name=run_name,
@@ -319,7 +329,7 @@ class Monitor:
         self.firestore_coll.document(run_name).update(firestore_payload)
 
     def run_workflow(self, run_name):
-        p = Process(target=self._workflow, args=(self.state, run_name))
+        p = Process(target=self._workflow, args=(self.state, self.lock, run_name))
         p.start()
 
     def scan(self):
@@ -342,6 +352,7 @@ class Monitor:
         any remaining steps, i.e. restart, cleanup, ...
         """
         for run_name in run_names:
+            self.debug_logger.debug("Processing rundir {}".format(run_name))
             run_status = self.db.get_run_status(run_name)
             if run_status == self.RUN_STATUS_NEW:
                 self.process_new_run(run_name)
@@ -358,13 +369,22 @@ class Monitor:
                 # Remove any zombie processes
                 # Curious why or how this works? See book Programming Python, 4th ed. section
                 # "Killing the zombies: Don't fear the reaper!".
-                os.waitpid(0, os.WNOHANG)
+                try:
+                    os.waitpid(0, os.WNOHANG)
+                except ChildProcessError:
+                    pass # No child processes
                 finished_rundirs = self.scan()
                 self.process_rundirs(run_names=finished_rundirs)
-                data = self.state.get(block=False)
-                if data:
-                    pid = data[0]
-                    msg = data[1]
+                # Now check the shared queue object to see if any child process ran into some trouble
+                # and recorded its dying last words:
+                child_process_msg = None
+                try:
+                    child_process_msg = self.state.get(block=False)
+                except queue.Empty:
+                    pass
+                if child_process_msg:
+                    pid = child_process_msg[0]
+                    msg = child_process_msg[1]
                     self.log_error(msg="Process {} exited with message '{}'.".format(pid, msg))
                     # Email notification
                 time.sleep(self.cycle_pause_sec)
