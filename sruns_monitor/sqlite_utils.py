@@ -130,3 +130,12 @@ class Db:
             input_name=name)
         DBG_LGR.debug(sql)
         self.curs.execute(sql)
+
+    def get_tables(self):
+        sql = "SELECT name FROM sqlite_master where type='table'"
+        res = self.curs.execute(sql)
+        # res is a list of one item tuples of the form [('tasks',)]
+        tables = []
+        for i in res:
+            tables.append(i[0])
+        return tables

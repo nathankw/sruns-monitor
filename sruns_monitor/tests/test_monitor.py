@@ -29,6 +29,7 @@ if os.path.exists(SQLITE_DB):
     os.remove(SQLITE_DB)
 
 CONF = {
+  "firestore_collection": "test_sruns",
   "watchdir": "SEQ_RUNS",
   "completed_runs_dir": "COMPLETED_RUNS",
   "sqlite_db": SQLITE_DB,
@@ -41,7 +42,7 @@ CONF = {
 CONF_FILE = os.path.join(TMP_DIR, "conf.json")
 open(CONF_FILE, 'w').write(json.dumps(CONF))
 
-class TestUtils(unittest.TestCase):
+class TestStatus(unittest.TestCase):
     """
     Tests functions in the ``sruns_monitor.utils`` module.
     """
@@ -55,13 +56,10 @@ class TestUtils(unittest.TestCase):
 
     def test_scan(self):
         """
-        Tests the function ``tar()`` for success. Calls the function to tar the test directory
-        in ./data/TEST_RUN_DIR, then checks whether the md5sum of the output tarball is equal to
-        the md5sum of ./data/test_run_dir.tar.gz (the latter of which was created with `tar -zcf`
-        command on Mac OS X.
+        Tests `Monitor.scan` for success. It should find only the completed run directories. 
         """
         rundirs = self.monitor.scan()
-        self.assertEqual(rundirs, ["CompletedRun1", "CompletedRun2"])
+        self.assertEqual(rundirs, ["CompletedRun1", "CompletedRun2", "TEST_RUN_DIR"])
 
     def test_status_new_run(self):
         """
@@ -69,7 +67,7 @@ class TestUtils(unittest.TestCase):
         record for it. 
         """
         status = self.monitor.get_run_status("CompletedRun1")
-        self.assertEqual(status, self.monitor.db.RUN_STATUS_NEW)
+        self.assertEqual(status, self.monitor.RUN_STATUS_NEW)
 
     def test_status_run_complete(self):
         """
@@ -80,39 +78,39 @@ class TestUtils(unittest.TestCase):
         run_name = "testrun"
         self.monitor.db.insert_run(name=run_name, tarfile="run.tar.gz", gcp_tarfile="/bucket/obj.tar.gz")
         status = self.monitor.get_run_status(run_name)
-        self.assertEqual(status, self.monitor.db.RUN_STATUS_COMPLETE)
+        self.assertEqual(status, self.monitor.RUN_STATUS_COMPLETE)
  
     def test_status_not_running_1(self):
         """
         When a database record has a partially completed workflow and the PID value is not set, 
-        `Monitor.get_run_status` should return the status `sqlite_utils.db.Db.RUN_STATUS_NOT_RUNNING`.
+        `Monitor.get_run_status` should return the status `self.Monitor.RUN_STATUS_NOT_RUNNING`.
         """
         run_name = "testrun"
         self.monitor.db.insert_run(name=run_name, tarfile="run.tar.gz", gcp_tarfile="", pid=0)
         status = self.monitor.get_run_status(run_name)
-        self.assertEqual(status, self.monitor.db.RUN_STATUS_NOT_RUNNING)
+        self.assertEqual(status, self.monitor.RUN_STATUS_NOT_RUNNING)
 
     def test_status_not_running_2(self):
         """
         When a database record has a partially completed workflow and the PID value is set but
         that process doens't actually exist, `Monitor.get_run_status` should return the status 
-        `sqlite_utils.db.Db.RUN_STATUS_NOT_RUNNING`.
+        `self.Monitor.RUN_STATUS_NOT_RUNNING`.
         """
         run_name = "testrun"
         self.monitor.db.insert_run(name=run_name, tarfile="run.tar.gz", gcp_tarfile="", pid=101010101010)
         status = self.monitor.get_run_status(run_name)
-        self.assertEqual(status, self.monitor.db.RUN_STATUS_NOT_RUNNING)
+        self.assertEqual(status, self.monitor.RUN_STATUS_NOT_RUNNING)
 
     def test_status_running(self):
         """
         When a database record has a partially completed workflow and the PID value is set and
         that process exists, `Monitor.get_run_status` should return the status 
-        `sqlite_utils.db.Db.RUN_STATUS_RUNNING`.
+        `self.Monitor.RUN_STATUS_RUNNING`.
         """
         run_name = "testrun"
         self.monitor.db.insert_run(name=run_name, tarfile="run.tar.gz", gcp_tarfile="", pid=os.getpid())
         status = self.monitor.get_run_status(run_name)
-        self.assertEqual(status, self.monitor.db.RUN_STATUS_RUNNING)
+        self.assertEqual(status, self.monitor.RUN_STATUS_RUNNING)
 
 
 class TestTaskTar(unittest.TestCase):
@@ -132,7 +130,7 @@ class TestTaskTar(unittest.TestCase):
         the database record.
         """
         self.monitor.db.insert_run(name=self.run_name)
-        self.monitor.task_tar(state=self.monitor.state, run_name=self.run_name) 
+        self.monitor.task_tar(state=self.monitor.state, lock=self.monitor.lock, run_name=self.run_name) 
         rec = self.monitor.db.get_run(name=self.run_name)
         pid = rec[self.monitor.db.TASKS_PID]
         self.assertTrue(pid > 0)
@@ -143,7 +141,7 @@ class TestTaskTar(unittest.TestCase):
         the database record.
         """
         self.monitor.db.insert_run(name=self.run_name)
-        self.monitor.task_tar(state=self.monitor.state, run_name=self.run_name) 
+        self.monitor.task_tar(state=self.monitor.state, lock=self.monitor.lock, run_name=self.run_name) 
         rec = self.monitor.db.get_run(name=self.run_name)
         tarfile = rec[self.monitor.db.TASKS_TARFILE]
         self.assertTrue(bool(tarfile))
@@ -154,7 +152,7 @@ class TestTaskTar(unittest.TestCase):
         record actually exists.
         """
         self.monitor.db.insert_run(name=self.run_name)
-        self.monitor.task_tar(state=self.monitor.state, run_name=self.run_name) 
+        self.monitor.task_tar(state=self.monitor.state, lock=self.monitor.lock, run_name=self.run_name) 
         rec = self.monitor.db.get_run(name=self.run_name)
         tarfile = rec[self.monitor.db.TASKS_TARFILE]
         self.assertTrue(os.path.exists(tarfile))
