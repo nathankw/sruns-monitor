@@ -51,6 +51,7 @@ class TestStatus(unittest.TestCase):
         self.monitor = Monitor(conf_file=CONF_FILE)
 
     def tearDown(self):
+        self.monitor.db.curs.close() # Prevent 'sqlite3.OperationalError: database is locked' errors. 
         if os.path.exists(SQLITE_DB):
             os.remove(SQLITE_DB)
 
@@ -130,7 +131,7 @@ class TestTaskTar(unittest.TestCase):
         the database record.
         """
         self.monitor.db.insert_run(name=self.run_name)
-        self.monitor.task_tar(state=self.monitor.state, lock=self.monitor.lock, run_name=self.run_name) 
+        self.monitor.run_workflow(run_name=self.run_name) 
         rec = self.monitor.db.get_run(name=self.run_name)
         pid = rec[self.monitor.db.TASKS_PID]
         self.assertTrue(pid > 0)

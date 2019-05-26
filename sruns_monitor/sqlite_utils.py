@@ -89,7 +89,8 @@ class Db:
     def update_run(self, name, payload):
         update_str = ""
         for attr in payload:
-            update_str += "{key}='{val}',".format(key=attr, val=payload[attr])
+            val = payload[attr]
+            update_str += "{key}='{val}',".format(key=attr, val=val)
         update_str = update_str.rstrip(",")
         sql = "UPDATE {table} SET {updates} WHERE name='{name}'".format(
             table=self.TASKS_TABLE_NAME, 
