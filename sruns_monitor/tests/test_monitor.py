@@ -20,7 +20,7 @@ import time
 import unittest
 
 import sruns_monitor as srm
-from sruns_monitor.tests import WATCH_DIR, COMPLETED_RUNS_DIR, TMP_DIR
+from sruns_monitor.tests import WATCH_DIR, COMPLETED_RUNS_DIR, TMP_DIR, DATA_DIR
 from sruns_monitor import utils
 from sruns_monitor.monitor import Monitor
 
@@ -34,7 +34,7 @@ CONF = {
   "completed_runs_dir": COMPLETED_RUNS_DIR,
   "sqlite_db": SQLITE_DB,
   "gcp_bucket_name": "nathankw-testcgs",
-  "gcp_bucket_basedir": "/",
+  "gcp_bucket_basedir": "/TESTS",
   "cycle_pause_sec": 30,
   "task_runtime_limit_sec": 24 * 60 * 60
 }
@@ -157,6 +157,71 @@ class TestTaskTar(unittest.TestCase):
         rec = self.monitor.db.get_run(name=self.run_name)
         tarfile = rec[self.monitor.db.TASKS_TARFILE]
         self.assertTrue(os.path.exists(tarfile))
+
+
+class TestTaskUpload(unittest.TestCase):
+
+    def setUp(self):
+        self.monitor = Monitor(conf_file=CONF_FILE) 
+        self.run_name = "CompletedRun1" # An actual test run directory
+        self.tarfile = os.path.join(DATA_DIR, "rundir.tar.gz")
+        fh = open(self.tarfile, 'w')
+        fh.write("test line")
+        fh.close()
+        self.monitor.db.insert_run(name=self.run_name, tarfile=self.tarfile)
+
+    def tearDown(self):
+        if os.path.exists(SQLITE_DB):
+            os.remove(SQLITE_DB)
+        blob = self.monitor.create_blob_name(run_name=self.run_name, filename=self.tarfile)
+        self.monitor.bucket.delete_blob(blob) # raises google.api_core.exceptions.NotFound if blob doesn't exist.
+
+    def test_task_upload_pid_set(self):
+        """
+        Makes sure that when uploading a tarball to GCP, the pid of the child process is inserted into 
+        the database record.
+        """
+        self.monitor.task_upload(state=self.monitor.state, run_name=self.run_name, lock=self.monitor.lock) 
+        rec = self.monitor.db.get_run(name=self.run_name)
+        pid = rec[self.monitor.db.TASKS_PID]
+        self.assertTrue(pid > 0)
+
+    def test_task_upload_tarfile_removed(self):
+        """
+        Makes sure that after uploading a tarball to GCP, the local tarfile is removed. Note that
+        the local record's `self.monitor.db.TASKS_TARFILE` attribute value is not changed, rather
+        the file is just removed. 
+        """
+        self.monitor.task_upload(state=self.monitor.state, run_name=self.run_name, lock=self.monitor.lock) 
+        rec = self.monitor.db.get_run(name=self.run_name)
+        tarfile = rec[self.monitor.db.TASKS_TARFILE]
+        self.assertFalse(os.path.exists(tarfile))
+
+    def test_task_upload_gcp_tarfile_set(self):
+        """
+        Makes sure that after uploading a tarred run directory to GCP, the local database record's
+        `self.monitor.db.TASKS_GCP_TARFILE` attribute is set. Note that it should be set to the
+        object's name in GCP, but this part of the logic isn't tested in this method. 
+        """
+        self.monitor.task_upload(state=self.monitor.state, lock=self.monitor.lock, run_name=self.run_name) 
+        rec = self.monitor.db.get_run(name=self.run_name)
+        gcp_tarfile = rec[self.monitor.db.TASKS_GCP_TARFILE]
+        self.assertTrue(bool(gcp_tarfile))
+
+    def test_task_upload_gcp_tarfile_exists(self):
+        """
+        Makes sure that after uploading a tarred run directory to GCP, the GCP object referenced in
+        the local database record's `self.monitor.db.TASKS_GCP_TARFILE` attribute actually exists
+        at the indicated location. 
+        """
+        self.monitor.task_upload(state=self.monitor.state, lock=self.monitor.lock, run_name=self.run_name) 
+        rec = self.monitor.db.get_run(name=self.run_name)
+        gcp_tarfile = rec[self.monitor.db.TASKS_GCP_TARFILE]
+        # gcp_tarfile has 'bucket_name/' at the beginnig of the path - need to remove that. 
+        gcp_tarfile = gcp_tarfile.split("/", 1)[-1]
+        blob = self.monitor.bucket.get_blob(gcp_tarfile)
+        # blob is None if file doesn't exist in GCP, otherwise it's a Blob instance. 
+        self.assertTrue(bool(blob))
 
 
 class TestChildTasksRuntime(unittest.TestCase):

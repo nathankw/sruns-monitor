@@ -228,18 +228,30 @@ class Monitor:
             if not tarfile:
                 raise MissingTarfile("Run {} does not have a tarfile.".format(run_name))
             # Upload tarfile to GCP bucket
-            blob_name = "/".join([self.bucket_basedir, run_name, os.path.basename(tarfile)]).lstrip("/")
+            blob_name = self.create_blob_name(run_name=run_name, filename=tarfile)
             with lock:
                 self.debug_logger.debug("Uploading {} to GCP Storage bucket {} as {}.".format(tarfile,self.bucket, blob_name))
             utils.upload_to_gcp(bucket=self.bucket, blob_name=blob_name, source_file=tarfile)
             self.db.update_run(
                 name=run_name,
                 payload={self.db.TASKS_GCP_TARFILE: "/".join([self.bucket_name, blob_name])})
+            # Remove local tarfile
+            os.remove(tarfile)
         except Exception as e:
             state.put((os.getpid(), e))
             # Let child process terminate as it would have so this error is spit out into
             # any potential downstream loggers as well. This does not effect the main thread.
             raise
+
+    def create_blob_name(self, run_name, filename):
+        """
+        Creates a name for a blob object to be in GCP. The name is formulated as follows:
+
+            self.bucket_basedir + '/' + run_name + '/' + os.path.basename(filename)
+
+        There will not be a '/' at the start.
+        """
+        return "/".join([self.bucket_basedir, run_name, os.path.basename(filename)]).lstrip("/")
 
     def get_run_status(self, run_name):
         """
