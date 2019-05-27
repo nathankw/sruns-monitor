@@ -51,7 +51,8 @@ class Db:
                        pid=self.TASKS_PID,
                        tarfile=self.TASKS_TARFILE,
                        gcp_tarfile=self.TASKS_GCP_TARFILE)
-        self.curs.execute(create_table_sql)
+        with self.conn:
+            self.curs.execute(create_table_sql)
 
     def insert_run(self, name, pid=0, tarfile="", gcp_tarfile=""):
         """
@@ -84,7 +85,8 @@ class Db:
                   tarfile=tarfile,
                   gcp_tarfile=gcp_tarfile)
         DBG_LGR.debug(sql)
-        self.curs.execute(sql) # Returns the sqlite3.Cursor object. 
+        with self.conn: 
+            self.curs.execute(sql) # Returns the sqlite3.Cursor object. 
 
     def update_run(self, name, payload):
         update_str = ""
@@ -97,7 +99,8 @@ class Db:
             updates=update_str,
             name=name)
         DBG_LGR.debug(sql)
-        self.curs.execute(sql)
+        with self.conn: 
+            self.curs.execute(sql)
               
     def get_run(self, name):
         """
@@ -130,7 +133,8 @@ class Db:
             name=self.TASKS_NAME, 
             input_name=name)
         DBG_LGR.debug(sql)
-        self.curs.execute(sql)
+        with self.conn: 
+            self.curs.execute(sql)
 
     def get_tables(self):
         sql = "SELECT name FROM sqlite_master where type='table';"
