@@ -44,10 +44,18 @@ class Monitor:
 
     #: Status value for a new sequencing run. 
     RUN_STATUS_NEW = "new"
+    #: Status value for a sequencing run that is running in the workflow. 
+    RUN_STATUS_STARTING = "starting"
+    #: Status value for a sequencing run that is in the tarring task
+    RUN_STATUS_TARRING = "tarring"
+    #: Status value for a sequencing run whose tarring task just completed
+    RUN_STATUS_TARRING_COMPLETE = "tarring_complete"
+    #: Status value for a sequencing run that is in the uploading task
+    RUN_STATUS_UPLOADING = "uploading"
+    #: Status value for a sequencing run whose uploading task just completed
+    RUN_STATUS_UPLOADING_COMPLETE = "uploading_complete"
     #: Status value for a sequencing run that has completed the workflow. 
     RUN_STATUS_COMPLETE = "complete"
-    #: Status value for a sequencing run that is running in the workflow. 
-    RUN_STATUS_RUNNING = "running"
     #: Status value for a sequencing run that is has partially gone through the workflow, and the
     #: workflow is no longer running. For example, the tarfile task ran but the upload to GCP 
     #: task didn't because maybe it failed for some reason. 
@@ -172,9 +180,17 @@ class Monitor:
         if not rec[self.db.TASKS_GCP_TARFILE]:
             self.task_upload(state=state, run_name=run_name, lock=lock)
 
+    def firestore_update_status(self, run_name, status):
+        # Update status of Firestore record
+        firestore_payload = {
+            srm.FIRESTORE_ATTR_WF_STATUS: status
+        }
+        self.firestore_coll.document(run_name).set(firestore_payload)
+
     def task_tar(self, state,  run_name, lock ):
         """
-        Creates a gzip tarfile of the run directory. The tarfile will be created in the directory
+        Creates a gzip tarfile of the run directory and updates the Firestore record's status to
+        indicate that this task is running. The tarfile will be created in the directory
         being watched (`self.watchdir`) and named the same as the `run_name` parameter, but with
         a .tar.gz suffix.
 
@@ -193,8 +209,12 @@ class Monitor:
             tarball_name = rundir_path + ".tar.gz"
             with lock:
                 self.debug_logger.debug("Tarring sequencing run {}.".format(run_name))
+            # Update status of Firestore record
+            self.firestore_update_status(run_name=run_name, status=self.RUN_STATUS_TARRING)
             tarball = utils.tar(rundir_path, tarball_name)
             self.db.update_run(name=run_name, payload={self.db.TASKS_TARFILE: tarball_name})
+            # Update status of Firestore record
+            self.firestore_update_status(run_name=run_name, status=self.RUN_STATUS_TARRING_COMPLETE)
         except Exception as e:
             state.put((os.getpid(), e))
             # Let child process terminate as it would have so this error is spit out into
@@ -204,6 +224,7 @@ class Monitor:
     def task_upload(self, state, run_name, lock):
         """
         Uploads the tarred run dirctory to GCP Storage in the directory specified by `self.bucket_basedir`.
+        The Firestore record's status is also updated to indicate that this task is running.
         The blob is named as $basedir/run_name/tarfile, where run_name is the squencing run name,
         and tarfile is the name of the tarfile produced by `self.task_tar`.
 
@@ -231,12 +252,16 @@ class Monitor:
             blob_name = self.create_blob_name(run_name=run_name, filename=tarfile)
             with lock:
                 self.debug_logger.debug("Uploading {} to GCP Storage bucket {} as {}.".format(tarfile,self.bucket, blob_name))
+            # Update status of Firestore record
+            self.firestore_update_status(run_name=run_name, status=self.RUN_STATUS_UPLOADING)
             utils.upload_to_gcp(bucket=self.bucket, blob_name=blob_name, source_file=tarfile)
             self.db.update_run(
                 name=run_name,
                 payload={self.db.TASKS_GCP_TARFILE: "/".join([self.bucket_name, blob_name])})
             # Remove local tarfile
             os.remove(tarfile)
+            # Update status of Firestore record
+            self.firestore_update_status(run_name=run_name, status=self.RUN_STATUS_UPLOADING_COMPLETE)
         except Exception as e:
             state.put((os.getpid(), e))
             # Let child process terminate as it would have so this error is spit out into
@@ -284,7 +309,7 @@ class Monitor:
             # If the process was running too long and got killed, then the next iteration of the
             # monitor will see that the pid isn't running and restart the workflow. To be safe then,
             # return a running status because we can't be sure that the kill signal worked just yet.
-            return self.RUN_STATUS_RUNNING
+            return self.RUN_STATUS_STARTING
         except psutil.NoSuchProcess:
             return self.RUN_STATUS_NOT_RUNNING
 
@@ -326,12 +351,12 @@ class Monitor:
         self.db.insert_run(name=run_name)
         # Create Firestore document
         firestore_payload = {
-            srm.FIRESTORE_ATTR_WF_STATUS: self.RUN_STATUS_RUNNING
+            srm.FIRESTORE_ATTR_WF_STATUS: self.RUN_STATUS_STARTING
         }
         self.firestore_coll.document(run_name).set(firestore_payload)
         self.run_workflow(run_name)
 
-    def process_completed_run(self, run_name):
+    def process_completed_run(self, run_name, archive=True):
         """
         Moves the run directory to the completed runs directory location that is defined 
         by `sruns_monitor.C_COMPLETED_RUNS_DIR`. 
@@ -343,9 +368,14 @@ class Monitor:
             * the workflow status attribute (identified by the variable `sruns_monitor.FIRESTORE_ATTR_WF_STATUS`.
               to completed. 
 
+        Args:
+            run_name: `str`.
+            archive: `boolean`. True meas to move the run directory to the completed runs location.
+
         """
         rec = self.db.get_run(run_name)
-        self.archive_run(run_name)
+        if archive:
+            self.archive_run(run_name)
         # Update Firestore record
         firestore_payload = {
             srm.FIRESTORE_ATTR_WF_STATUS: self.RUN_STATUS_COMPLETE,
@@ -383,7 +413,7 @@ class Monitor:
                 self.process_new_run(run_name)
             elif run_status == self.RUN_STATUS_COMPLETE:
                 self.process_completed_run(run_name)
-            elif run_status == self.RUN_STATUS_RUNNING:
+            elif run_status == self.RUN_STATUS_STARTING:
                 pass
             elif run_status == self.RUN_STATUS_NOT_RUNNING:
                 self.run_workflow(run_name)
