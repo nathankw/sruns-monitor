@@ -26,18 +26,20 @@ class Db:
     #: 'tasks' table attribute name that stores the path to the gzip tarfile in a GCP Storage bucket.
     TASKS_GCP_TARFILE = "gcp_tarfile"
 
-    def __init__(self, dbname):
+    def __init__(self, dbname, verbose=False):
         """
         Args:
             dbname: `str`. Name of the local database file. If it doesn't end with a .db exention,
                 one will be added. 
         """
+        #: If True, then verbose logging is enabled.
+        self.verbose = verbose
         if not dbname.endswith(".db"):
             dbname += ".db"
         self.dbname = dbname
         # Database is created if it doesn't exist yet. See entry level details here:
         # http://www.sqlitetutorial.net/sqlite-python/creating-database/
-        DBG_LGR.error("Connecting to sqlite database {}".format(dbname))
+        self.log(msg="Connecting to sqlite database {}".format(dbname), verbose=True)
         self.conn = sqlite3.connect(dbname)
         self.curs = self.conn.cursor()
         create_table_sql = """
@@ -53,6 +55,11 @@ class Db:
                        gcp_tarfile=self.TASKS_GCP_TARFILE)
         with self.conn:
             self.curs.execute(create_table_sql)
+
+    def log(self, msg, verbose=False):
+        if verbose and not self.verbose:
+            return
+        DBG_LGR.debug(msg)
 
     def insert_run(self, name, pid=0, tarfile="", gcp_tarfile=""):
         """
@@ -84,7 +91,7 @@ class Db:
                   pid=pid,
                   tarfile=tarfile,
                   gcp_tarfile=gcp_tarfile)
-        DBG_LGR.debug(sql)
+        self.log(msg=sql, verbose=True)
         with self.conn: 
             self.curs.execute(sql) # Returns the sqlite3.Cursor object. 
 
@@ -98,7 +105,7 @@ class Db:
             table=self.TASKS_TABLE_NAME, 
             updates=update_str,
             name=name)
-        DBG_LGR.debug(sql)
+        self.log(msg=sql, verbose=True)
         with self.conn: 
             self.curs.execute(sql)
               
@@ -116,7 +123,7 @@ class Db:
             table=self.TASKS_TABLE_NAME,
             input_name=name)
 
-        DBG_LGR.debug(sql)
+        self.log(msg=sql, verbose=True)
         res = self.curs.execute(sql).fetchone()
         if not res:
             return {}
@@ -132,7 +139,8 @@ class Db:
             table=self.TASKS_TABLE_NAME,
             name=self.TASKS_NAME, 
             input_name=name)
-        DBG_LGR.debug(sql)
+        self.log(msg=sql, verbose=True)
+
         with self.conn: 
             self.curs.execute(sql)
 

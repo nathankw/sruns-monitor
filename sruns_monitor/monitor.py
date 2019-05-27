@@ -53,7 +53,9 @@ class Monitor:
     #: task didn't because maybe it failed for some reason. 
     RUN_STATUS_NOT_RUNNING = "not_running"
 
-    def __init__(self, conf_file):
+    def __init__(self, conf_file, verbose=False):
+        #: If True, then verbose logging is enabled. 
+        self.verbose = verbose
         self.conf = self._validate_conf(conf_file)
         self.gcp_storage_client = storage.Client()
         self.firestore_coll = firestore.Client().collection(self.conf["firestore_collection"])
@@ -89,7 +91,7 @@ class Monitor:
         #: The local sqlite database in which to store workflow status for a given run. If not provided,
         #: defaults to 'sruns.db'. See `sruns_monitor.sqlite_utils.Db` for more details on the
         #: structure of records in this database.
-        self.db = Db(self.conf.get(srm.C_SQLITE_DB, "sruns.db"))
+        self.db = Db(dbname=self.conf.get(srm.C_SQLITE_DB, "sruns.db"), verbose=self.verbose)
 
         #: A reference to the `debug` logging instance that was created earlier in ``sruns_monitor.debug_logger``.
         #: Here, a file handler is being added to it for logging all messages sent to it. 
@@ -375,9 +377,11 @@ class Monitor:
                 self.run_workflow(run_name)
 
     def start(self):
+        cycle_num = 0
         try:
             while True:
-                print("Cycle")
+                cycle_num += 1
+                print("Cycle", cycle_num)
                 # Remove any zombie processes
                 # Curious why or how this works? See book Programming Python, 4th ed. section
                 # "Killing the zombies: Don't fear the reaper!".
