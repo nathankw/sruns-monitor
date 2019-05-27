@@ -72,7 +72,7 @@ class Db:
         """
         sql = """
               INSERT INTO {table}({name_attr},{pid_attr},{tarfile_attr},{gcp_tarfile_attr})
-              VALUES('{name}',{pid},'{tarfile}','{gcp_tarfile}')
+              VALUES('{name}',{pid},'{tarfile}','{gcp_tarfile}');
               """.format(
                   table=self.TASKS_TABLE_NAME,
                   name_attr=self.TASKS_NAME,
@@ -92,7 +92,7 @@ class Db:
             val = payload[attr]
             update_str += "{key}='{val}',".format(key=attr, val=val)
         update_str = update_str.rstrip(",")
-        sql = "UPDATE {table} SET {updates} WHERE name='{name}'".format(
+        sql = "UPDATE {table} SET {updates} WHERE name='{name}';".format(
             table=self.TASKS_TABLE_NAME, 
             updates=update_str,
             name=name)
@@ -105,7 +105,7 @@ class Db:
             `tuple`: A record whose name attribute has the supplied name exists. 
             `None`: No such record exists.
         """
-        sql = "SELECT {name},{pid},{tarfile},{gcp_tarfile} FROM {table} WHERE {name}='{input_name}'".format(
+        sql = "SELECT {name},{pid},{tarfile},{gcp_tarfile} FROM {table} WHERE {name}='{input_name}';".format(
             name=self.TASKS_NAME, 
             pid=self.TASKS_PID,
             tarfile=self.TASKS_TARFILE, 
@@ -125,7 +125,7 @@ class Db:
         }
 
     def delete_run(self, name):
-        sql = "DELETE FROM {table} WHERE {name}='{input_name}'".format(
+        sql = "DELETE FROM {table} WHERE {name}='{input_name}';".format(
             table=self.TASKS_TABLE_NAME,
             name=self.TASKS_NAME, 
             input_name=name)
@@ -133,7 +133,7 @@ class Db:
         self.curs.execute(sql)
 
     def get_tables(self):
-        sql = "SELECT name FROM sqlite_master where type='table'"
+        sql = "SELECT name FROM sqlite_master where type='table';"
         res = self.curs.execute(sql)
         # res is a list of one item tuples of the form [('tasks',)]
         tables = []

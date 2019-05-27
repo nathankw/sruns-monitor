@@ -111,8 +111,12 @@ class Monitor:
         Args:
             conf_file: `str`. The JSON configuration file.
         """
-        jconf = json.load(open(conf_file))
-        jschema = json.load(open(srm.CONF_SCHEMA))
+        conf_fh = open(conf_file)
+        jconf = json.load(conf_fh)
+        conf_fh.close() 
+        schema_fh = open(srm.CONF_SCHEMA)
+        jschema = json.load(schema_fh)
+        schema_fh.close()
         jsonschema.validate(jconf, jschema)
         return jconf
 
@@ -142,6 +146,7 @@ class Monitor:
         # Kill child processes by sending a SIGKILL.
         [c.kill() for c in child_processes] # equiv. to os.kill(pid, signal.SIGKILL) on UNIX.
         self.db.curs.close()
+        self.db.conn.close()
         sys.exit(128 + signum)
 
     def get_rundir_path(self, run_name):
@@ -159,7 +164,6 @@ class Monitor:
             state: `multiprocessing.Queue` instance.
             run_name: `str`. The name of a sequencing run.
         """
-        self.db.update_run(name=run_name, payload={self.db.TASKS_PID: os.getpid()})
         rec = self.db.get_run(run_name)
         if not rec[self.db.TASKS_TARFILE]:
             self.task_tar(state=state, run_name=run_name, lock=lock)
@@ -172,16 +176,19 @@ class Monitor:
         being watched (`self.watchdir`) and named the same as the `run_name` parameter, but with
         a .tar.gz suffix.
 
-        Once tarring is complete, the database record is updated such that the attribute
-        `sqlite_utils.Db.TASKS_TARFILE` is set to the path of the tarfile.
+        Once tarring is complete, the local database record is updated such that the attribute
+        `sqlite_utils.Db.TASKS_TARFILE` is set to the path of the tarfile. Note that this method
+        also updates the local database record to set the pid field with the process ID its running
+        in.
 
         Args:
             state: `multiprocessing.Queue` instance.
             run_name: `str`. The name of a sequencing run.
         """
-        rundir_path = self.get_rundir_path(run_name)
-        tarball_name = rundir_path + ".tar.gz"
         try:
+            self.db.update_run(name=run_name, payload={self.db.TASKS_PID: os.getpid()})
+            rundir_path = self.get_rundir_path(run_name)
+            tarball_name = rundir_path + ".tar.gz"
             with lock:
                 self.debug_logger.debug("Tarring sequencing run {}.".format(run_name))
             tarball = utils.tar(rundir_path, tarball_name)
@@ -201,6 +208,8 @@ class Monitor:
         Once uploading is complete, the local database record is updated such that the attribute
         `sqlite_utils.Db.TASKS_GCP_TARFILE` is set to the location of the blob as a string value
         formatted as '$bucket_name/blob_path'.
+        Note that this method also updates the local database record to set the pid field with 
+        the process ID its running in.
 
         Args:
             state: `multiprocessing.Queue` instance.
@@ -211,6 +220,7 @@ class Monitor:
             in self.db.
         """
         try:
+            self.db.update_run(name=run_name, payload={self.db.TASKS_PID: os.getpid()})
             rec = self.db.get_run(run_name)
             tarfile = rec[self.db.TASKS_TARFILE]
             if not tarfile:

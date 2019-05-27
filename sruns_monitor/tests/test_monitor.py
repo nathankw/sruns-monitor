@@ -20,18 +20,18 @@ import time
 import unittest
 
 import sruns_monitor as srm
-from sruns_monitor.tests import WATCH_DIR, TMP_DIR
+from sruns_monitor.tests import WATCH_DIR, COMPLETED_RUNS_DIR, TMP_DIR
 from sruns_monitor import utils
 from sruns_monitor.monitor import Monitor
 
-SQLITE_DB = "monitortest.db"
+SQLITE_DB = os.path.join(os.path.dirname(__file__), "monitortest.db")
 if os.path.exists(SQLITE_DB):
     os.remove(SQLITE_DB)
 
 CONF = {
   "firestore_collection": "test_sruns",
-  "watchdir": "SEQ_RUNS",
-  "completed_runs_dir": "COMPLETED_RUNS",
+  "watchdir": WATCH_DIR,
+  "completed_runs_dir": COMPLETED_RUNS_DIR,
   "sqlite_db": SQLITE_DB,
   "gcp_bucket_name": "nathankw-testcgs",
   "gcp_bucket_basedir": "/",
@@ -131,7 +131,7 @@ class TestTaskTar(unittest.TestCase):
         the database record.
         """
         self.monitor.db.insert_run(name=self.run_name)
-        self.monitor.run_workflow(run_name=self.run_name) 
+        self.monitor.task_tar(state=self.monitor.state, run_name=self.run_name, lock=self.monitor.lock) 
         rec = self.monitor.db.get_run(name=self.run_name)
         pid = rec[self.monitor.db.TASKS_PID]
         self.assertTrue(pid > 0)
@@ -159,12 +159,16 @@ class TestTaskTar(unittest.TestCase):
         self.assertTrue(os.path.exists(tarfile))
 
 
-class TestChildTasks(unittest.TestCase):
+class TestChildTasksRuntime(unittest.TestCase):
 
     def setUp(self):
         self.monitor = Monitor(conf_file=CONF_FILE)
 
     def test_running_too_long(self):
+        """
+        Tests that the method `monitor.Monitor.running_too_long` returns True when a child task
+        runs for more than the configured amount of time.
+        """
         
         def child_task():
             time.sleep(3)
@@ -177,6 +181,10 @@ class TestChildTasks(unittest.TestCase):
         assert(self.monitor.running_too_long(process=psutil.Process(p.pid)), True)
 
     def test_not_running_too_long(self):
+        """
+        Tests that the method `monitor.Monitor.running_too_long` returns False when a child task
+        runs for less than the configured amount of time.
+        """
         
         def child_task():
             time.sleep(3)
