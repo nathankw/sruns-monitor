@@ -44,13 +44,20 @@ open(CONF_FILE, 'w').write(json.dumps(CONF))
 
 class TestStatus(unittest.TestCase):
     """
-    Tests functions in the ``sruns_monitor.utils`` module.
+    Tests for `Monitor.scan` and `Monitor.get_run_status`.
     """
 
     def setUp(self):
+        """
+        Create a `Monitor` instance before each test runs.  The SQLite database specified by the
+        conf file is created when the Monitor is instantiated. 
+        """
         self.monitor = Monitor(conf_file=CONF_FILE)
 
     def tearDown(self):
+        """
+        Remove local SQLite database after each test runs.
+        """
         self.monitor.db.curs.close() # Prevent 'sqlite3.OperationalError: database is locked' errors.
         if os.path.exists(SQLITE_DB):
             os.remove(SQLITE_DB)
@@ -72,9 +79,10 @@ class TestStatus(unittest.TestCase):
 
     def test_status_run_complete(self):
         """
-        Tests that the monitor can detect that a run is completed when its database record has
-        a value set for each attribute that represents a workflow step results, i.e. the tarfile
-        path and the GCP Storage object path.
+        Tests that the monitor can detect that a run has completed when its database record has
+        a value set for each attribute that represents a workflow step result, i.e. the tarfile
+        path and the GCP Storage object path. `Monitor.get_run_status` should return the status 
+        `self.Monitor.RUN_STATUS_COMPLETE`.
         """
         run_name = "testrun"
         self.monitor.db.insert_run(name=run_name, tarfile="run.tar.gz", gcp_tarfile="/bucket/obj.tar.gz")
@@ -94,11 +102,11 @@ class TestStatus(unittest.TestCase):
     def test_status_not_running_2(self):
         """
         When a database record has a partially completed workflow and the PID value is set but
-        that process doens't actually exist, `Monitor.get_run_status` should return the status
+        that process doesn't actually exist, `Monitor.get_run_status` should return the status
         `self.Monitor.RUN_STATUS_NOT_RUNNING`.
         """
         run_name = "testrun"
-        self.monitor.db.insert_run(name=run_name, tarfile="run.tar.gz", gcp_tarfile="", pid=101010101010)
+        self.monitor.db.insert_run(name=run_name, tarfile="run.tar.gz", gcp_tarfile="", pid=1010101010)
         status = self.monitor.get_run_status(run_name)
         self.assertEqual(status, self.monitor.RUN_STATUS_NOT_RUNNING)
 
@@ -117,34 +125,42 @@ class TestStatus(unittest.TestCase):
 class TestTaskTar(unittest.TestCase):
 
     def setUp(self):
+        """
+        Creates a `Monitor` instance before each test runs.  The SQLite database specified by the 
+        conf file is created when the Monitor is instantiated, and a record is written with only
+        its name attribute set. Then, the tar task executes. Once that completes, the SQLite
+        record is stored as `self.rec` for inspection in the various test methods. 
+        """
         self.monitor = Monitor(conf_file=CONF_FILE)
         self.run_name = "CompletedRun1" # An actual test run directory
         self.tarfile_name = self.run_name + ".tar.gz"
+        self.monitor.db.insert_run(name=self.run_name)
+        self.monitor.task_tar(state=self.monitor.state, run_name=self.run_name, lock=self.monitor.lock)
+        self.rec = self.monitor.db.get_run(name=self.run_name)
 
     def tearDown(self):
+        """
+        Remove local SQLite database after each test runs.
+        """
         if os.path.exists(SQLITE_DB):
             os.remove(SQLITE_DB)
 
     def test_task_tar_pid_set(self):
         """
         Makes sure that when tarring a run directory, the pid of the child process is inserted into
-        the database record.
+        the SQLite record. Note in this case, the tarring method is run in the same thread, which
+        is fine since this test is chiefly concerned with verifying that the pid attribute
+        of the record is set. 
         """
-        self.monitor.db.insert_run(name=self.run_name)
-        self.monitor.task_tar(state=self.monitor.state, run_name=self.run_name, lock=self.monitor.lock)
-        rec = self.monitor.db.get_run(name=self.run_name)
-        pid = rec[self.monitor.db.TASKS_PID]
+        pid = self.rec[self.monitor.db.TASKS_PID]
         self.assertTrue(pid > 0)
 
     def test_task_tar_tarfile_set(self):
         """
         Makes sure that after tarring a run directory, the tarfile name is inserted into
-        the database record.
+        the SQLite record.
         """
-        self.monitor.db.insert_run(name=self.run_name)
-        self.monitor.task_tar(state=self.monitor.state, lock=self.monitor.lock, run_name=self.run_name)
-        rec = self.monitor.db.get_run(name=self.run_name)
-        tarfile = rec[self.monitor.db.TASKS_TARFILE]
+        tarfile = self.rec[self.monitor.db.TASKS_TARFILE]
         self.assertTrue(bool(tarfile))
 
     def test_task_tar_tarfile_exists(self):
@@ -152,16 +168,23 @@ class TestTaskTar(unittest.TestCase):
         Makes sure that after tarring a run directory, the tarfile referenced in the database
         record actually exists.
         """
-        self.monitor.db.insert_run(name=self.run_name)
-        self.monitor.task_tar(state=self.monitor.state, lock=self.monitor.lock, run_name=self.run_name)
-        rec = self.monitor.db.get_run(name=self.run_name)
-        tarfile = rec[self.monitor.db.TASKS_TARFILE]
+        tarfile = self.rec[self.monitor.db.TASKS_TARFILE]
         self.assertTrue(os.path.exists(tarfile))
 
 
 class TestTaskUpload(unittest.TestCase):
+    """
+    Test's the monitor's upload-to-GCP-Storage application logic.
+    """
 
     def setUp(self):
+        """
+        Create a `Monitor` instance before each test runs.  The SQLite database specified by the 
+        conf file is created when the Monitor is instantiated. A run record is inserted into
+        the database with a value already set for the local tarfile path, which points to a tarfile
+        that is also created each time before a test runs as `Monitor.task_upload` removes the local
+        tarfile before exiting. 
+        """
         self.monitor = Monitor(conf_file=CONF_FILE)
         self.run_name = "CompletedRun1" # An actual test run directory
         self.tarfile = os.path.join(DATA_DIR, "rundir.tar.gz")
@@ -171,6 +194,10 @@ class TestTaskUpload(unittest.TestCase):
         self.monitor.db.insert_run(name=self.run_name, tarfile=self.tarfile)
 
     def tearDown(self):
+        """
+        Remove local SQLite database after each test runs, as well as the blob object that is
+        created in GCP Storage.
+        """
         if os.path.exists(SQLITE_DB):
             os.remove(SQLITE_DB)
         blob = self.monitor.create_blob_name(run_name=self.run_name, filename=self.tarfile)
@@ -199,7 +226,7 @@ class TestTaskUpload(unittest.TestCase):
 
     def test_task_upload_gcp_tarfile_set(self):
         """
-        Makes sure that after uploading a tarred run directory to GCP, the local database record's
+        Makes sure that after uploading a tarred run directory to GCP, the SQLite database record's
         `self.monitor.db.TASKS_GCP_TARFILE` attribute is set. Note that it should be set to the
         object's name in GCP, but this part of the logic isn't tested in this method.
         """
@@ -227,14 +254,17 @@ class TestTaskUpload(unittest.TestCase):
 class TestFirestore(unittest.TestCase):
 
     def setUp(self):
+        """
+        Create a `Monitor` instance before each test runs.  The SQLite database specified by the 
+        conf file is created when the Monitor is instantiated. A run record is inserted into
+        the local SQLite database with a value set for the name only. Also, a Firestore record is 
+        created that initially sets the run name attribute, as well as the workflow status attribute 
+        to starting.
+        
+        """
         self.monitor = Monitor(conf_file=CONF_FILE)
         self.run_name = "CompletedRun1" # An actual test run directory
-        self.tarfile = os.path.join(DATA_DIR, "rundir.tar.gz")
-        fh = open(self.tarfile, 'w')
-        fh.write("test line")
-        fh.close()
-        # Make sure local database record always has a tarfile set
-        self.monitor.db.insert_run(name=self.run_name, tarfile=self.tarfile)
+        self.monitor.db.insert_run(name=self.run_name)
         # Create Firestore document
         firestore_payload = {
             srm.FIRESTORE_ATTR_WF_STATUS: self.monitor.RUN_STATUS_STARTING
@@ -242,23 +272,28 @@ class TestFirestore(unittest.TestCase):
         self.monitor.firestore_coll.document(self.run_name).set(firestore_payload)
 
     def tearDown(self):
+        """
+        Remove local SQLite database after each test runs, as well as the related Firestore record.
+        """
         if os.path.exists(SQLITE_DB):
             os.remove(SQLITE_DB)
         self.monitor.firestore_coll.document(self.run_name).delete()
 
     def test_status_tar_complete(self):
-        rundir = os.path.join(self.monitor.watchdir, self.run_name)
-        if not os.path.exists(rundir):
-            os.mkdir(rundir)
-            fh = open(os.path.join(rundir, "CopyComplete.txt"), "w")
-            fh.write("test line")
-            fh.close()
+        """
+        Tests that after tarring is complete, the Firestore record's `sruns_monitor.FIRESTORE_ATTR_WF_STATUS`
+        attribute is set to `Monitor.RUN_STATUS_TARRING_COMPLETE`. 
+        """
         self.monitor.task_tar(state=self.monitor.state, run_name=self.run_name, lock=self.monitor.lock)
         doc_ref = self.monitor.firestore_coll.document(self.run_name).get()
         doc = doc_ref.to_dict()
         self.assertEqual(doc[srm.FIRESTORE_ATTR_WF_STATUS], self.monitor.RUN_STATUS_TARRING_COMPLETE)
 
     def test_status_upload_complete(self):
+        """
+        Tests that after uploading the tarfile to GCP is complete, the Firestore record's 
+        `sruns_monitor.FIRESTORE_ATTR_WF_STATUS` attribute is set to `Monitor.RUN_STATUS_UPLOADING_COMPLETE`. 
+        """
         self.monitor.task_upload(state=self.monitor.state, run_name=self.run_name, lock=self.monitor.lock)
         doc_ref = self.monitor.firestore_coll.document(self.run_name).get()
         doc = doc_ref.to_dict()
@@ -266,6 +301,9 @@ class TestFirestore(unittest.TestCase):
 
     def test_status_complete(self):
         """
+        Tests that after running the entire workflow, the Firestore record's 
+        `sruns_monitor.FIRESTORE_ATTR_WF_STATUS` attribute is set to `Monitor.RUN_STATUS_COMPLETE`. 
+
         Calls `monitor.Monitor.process_completed_run()`, which updates two attributes in Firestore:
 
           * `sruns_monitor.FIRESTORE_ATTR_WF_STATUS`
@@ -283,6 +321,10 @@ class TestFirestore(unittest.TestCase):
 
     def test_tarfile_path(self):
         """
+        Tests that after running the entire workflow, the Firestore record's 
+        `sruns_monitor.FIRESTORE_ATTR_STORAGE` attribute is set to the same value as designated in
+        the local SQLite record. 
+
         Calls `monitor.Monitor.process_completed_run()`, which updates two attributes in Firestore:
 
           * `sruns_monitor.FIRESTORE_ATTR_WF_STATUS`

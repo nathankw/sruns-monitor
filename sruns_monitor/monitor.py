@@ -233,6 +233,8 @@ class Monitor:
         formatted as '$bucket_name/blob_path'.
         Note that this method also updates the local database record to set the pid field with 
         the process ID its running in.
+ 
+        Finally, the local tarfile is removed. 
 
         Args:
             state: `multiprocessing.Queue` instance.
