@@ -140,10 +140,12 @@ class TestTaskTar(unittest.TestCase):
 
     def tearDown(self):
         """
-        Remove local SQLite database after each test runs.
+        Remove local SQLite database and tarfile after each test runs.
         """
         if os.path.exists(SQLITE_DB):
             os.remove(SQLITE_DB)
+        os.remove(self.rec[self.monitor.db.TASKS_TARFILE])
+         
 
     def test_task_tar_pid_set(self):
         """
@@ -183,7 +185,8 @@ class TestTaskUpload(unittest.TestCase):
         conf file is created when the Monitor is instantiated. A run record is inserted into
         the database with a value already set for the local tarfile path, which points to a tarfile
         that is also created each time before a test runs as `Monitor.task_upload` removes the local
-        tarfile before exiting. 
+        tarfile before exiting.  Then, the upload task executes. Once that completes, the SQLite
+        record is stored as `self.rec` for inspection in the various test methods. 
         """
         self.monitor = Monitor(conf_file=CONF_FILE)
         self.run_name = "CompletedRun1" # An actual test run directory
@@ -192,6 +195,8 @@ class TestTaskUpload(unittest.TestCase):
         fh.write("test line")
         fh.close()
         self.monitor.db.insert_run(name=self.run_name, tarfile=self.tarfile)
+        self.monitor.task_upload(state=self.monitor.state, run_name=self.run_name, lock=self.monitor.lock)
+        self.rec = self.monitor.db.get_run(name=self.run_name)
 
     def tearDown(self):
         """
@@ -208,9 +213,7 @@ class TestTaskUpload(unittest.TestCase):
         Makes sure that when uploading a tarball to GCP, the pid of the child process is inserted into
         the database record.
         """
-        self.monitor.task_upload(state=self.monitor.state, run_name=self.run_name, lock=self.monitor.lock)
-        rec = self.monitor.db.get_run(name=self.run_name)
-        pid = rec[self.monitor.db.TASKS_PID]
+        pid = self.rec[self.monitor.db.TASKS_PID]
         self.assertTrue(pid > 0)
 
     def test_task_upload_tarfile_removed(self):
@@ -219,9 +222,7 @@ class TestTaskUpload(unittest.TestCase):
         the local record's `self.monitor.db.TASKS_TARFILE` attribute value is not changed, rather
         the file is just removed.
         """
-        self.monitor.task_upload(state=self.monitor.state, run_name=self.run_name, lock=self.monitor.lock)
-        rec = self.monitor.db.get_run(name=self.run_name)
-        tarfile = rec[self.monitor.db.TASKS_TARFILE]
+        tarfile = self.rec[self.monitor.db.TASKS_TARFILE]
         self.assertFalse(os.path.exists(tarfile))
 
     def test_task_upload_gcp_tarfile_set(self):
@@ -230,9 +231,7 @@ class TestTaskUpload(unittest.TestCase):
         `self.monitor.db.TASKS_GCP_TARFILE` attribute is set. Note that it should be set to the
         object's name in GCP, but this part of the logic isn't tested in this method.
         """
-        self.monitor.task_upload(state=self.monitor.state, lock=self.monitor.lock, run_name=self.run_name)
-        rec = self.monitor.db.get_run(name=self.run_name)
-        gcp_tarfile = rec[self.monitor.db.TASKS_GCP_TARFILE]
+        gcp_tarfile = self.rec[self.monitor.db.TASKS_GCP_TARFILE]
         self.assertTrue(bool(gcp_tarfile))
 
     def test_task_upload_gcp_tarfile_exists(self):
@@ -241,7 +240,6 @@ class TestTaskUpload(unittest.TestCase):
         the local database record's `self.monitor.db.TASKS_GCP_TARFILE` attribute actually exists
         at the indicated location.
         """
-        self.monitor.task_upload(state=self.monitor.state, lock=self.monitor.lock, run_name=self.run_name)
         rec = self.monitor.db.get_run(name=self.run_name)
         gcp_tarfile = rec[self.monitor.db.TASKS_GCP_TARFILE]
         # gcp_tarfile has 'bucket_name/' at the beginnig of the path - need to remove that.
@@ -294,6 +292,7 @@ class TestFirestore(unittest.TestCase):
         Tests that after uploading the tarfile to GCP is complete, the Firestore record's 
         `sruns_monitor.FIRESTORE_ATTR_WF_STATUS` attribute is set to `Monitor.RUN_STATUS_UPLOADING_COMPLETE`. 
         """
+        self.monitor.task_tar(state=self.monitor.state, run_name=self.run_name, lock=self.monitor.lock)
         self.monitor.task_upload(state=self.monitor.state, run_name=self.run_name, lock=self.monitor.lock)
         doc_ref = self.monitor.firestore_coll.document(self.run_name).get()
         doc = doc_ref.to_dict()
@@ -356,11 +355,11 @@ class TestChildTasksRuntime(unittest.TestCase):
             time.sleep(3)
 
         # Make process limit 1 second
-        self.monitor.conf[srm.C_TASK_RUNTIME_LIMIT_SEC] = 1
+        self.monitor.process_runtime_limit_sec = 1
         p = multiprocessing.Process(target=child_task)
         p.start()
         time.sleep(1)
-        assert(self.monitor.running_too_long(process=psutil.Process(p.pid)), True)
+        self.assertTrue((self.monitor.running_too_long(process=psutil.Process(p.pid))))
 
     def test_not_running_too_long(self):
         """
@@ -372,11 +371,11 @@ class TestChildTasksRuntime(unittest.TestCase):
             time.sleep(3)
 
         # Make process limit 1 second
-        self.monitor.conf[srm.C_TASK_RUNTIME_LIMIT_SEC] = 5
+        self.monitor.process_runtime_limit_sec= 5
         p = multiprocessing.Process(target=child_task)
         p.start()
         time.sleep(1)
-        assert(self.monitor.running_too_long(process=psutil.Process(p.pid)), False)
+        self.assertFalse(bool(self.monitor.running_too_long(process=psutil.Process(p.pid))))
 
 
 if __name__ == "__main__":

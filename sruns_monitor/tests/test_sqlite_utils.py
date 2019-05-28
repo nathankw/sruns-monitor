@@ -31,7 +31,7 @@ class TestDb(unittest.TestCase):
         self.db = sqlite_utils.Db(self.dbfile)
     
 
-    def teardown(self):
+    def tearDown(self):
         self.db.curs.close() # Prevent 'sqlite3.OperationalError: database is locked' errors.
         os.remove(self.dbfile)
       
