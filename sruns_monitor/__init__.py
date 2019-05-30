@@ -45,6 +45,8 @@ C_TASK_RUNTIME_LIMIT_SEC = "task_runtime_limit_sec"
 
 # Attribute names for Firestore database
 FIRESTORE_ATTR_RUN_NAME = "name"
+#: The status of the workflow. Possible values are provided by the 
+#: `sruns_monitor.monitor.Monitor.RUN_STATUS_*` attributes.
 FIRESTORE_ATTR_WF_STATUS = "workflow_status"
 #: Bucket storage object path for the tarred run directory in the form bucket_name/path/to/run.tar.gz.
 FIRESTORE_ATTR_STORAGE = "storage" 

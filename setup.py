@@ -18,7 +18,7 @@ import glob
 import os
 from setuptools import setup, find_packages
 
-with open("README.md", "r") as fh:
+with open("README.rst", "r") as fh:
     long_description = fh.read()
 
 SCRIPTS_DIR = os.path.join("sruns_monitor", "scripts")
@@ -33,13 +33,13 @@ setup(
       "License :: OSI Approved :: MIT License",
       "Operating System :: OS Independent",
   ],
-  description = "Looks for new Illumina sequencing runs and tars them up into GCP storage"
+  description = "Looks for new Illumina sequencing runs and tars them up into GCP storage",
   install_requires = [
     "google-cloud-firestore",
     "google-cloud-storage",
     "jsonschema",
     "psutil"
-  ]
+  ],
   long_description = long_description,
   long_description_content_type = "text/markdown",
   name = "sruns-monitor",

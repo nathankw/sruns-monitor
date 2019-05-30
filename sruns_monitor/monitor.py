@@ -366,7 +366,9 @@ class Monitor:
         Updates Firestore to set 
 
             * the GCP storage attribute (identified by the variable `sruns_monitor.FIRESTORE_ATTR_STORAGE`)
-              to the location of the gzip tarfile of the run directory in GCP bucket storage. 
+              to the location of the gzip tarfile of the run directory in GCP bucket storage. This
+              value is extracted from the local record in the SQLite database, and is formatted as
+              '$bucket_name/blob_path'.
             * the workflow status attribute (identified by the variable `sruns_monitor.FIRESTORE_ATTR_WF_STATUS`.
               to completed. 
 
