@@ -1,10 +1,7 @@
-#######################
 Sequencing Runs Monitor 
-#######################
+***********************
 
--------------------------------------------------------------------------
 A tool that archives new Illumina sequencing runs to Google Cloud Storage
--------------------------------------------------------------------------
 
 Use case
 ========
@@ -113,8 +110,17 @@ There is a record in the collection for each sequencing run. The possible fields
     * `complete`
     * `not_running`
 
-Installation
-============
+Installation and setup
+======================
 This works in later versions of Python 3 only::
 
   pip3 install sruns-monitor
+
+It is recommended to start your compute instance (that will run the monitor) using a service account
+with the following roles:
+
+  * roles/storage.objectAdmin
+  * roles/datastore.owner
+
+
+
