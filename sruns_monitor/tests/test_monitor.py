@@ -240,8 +240,7 @@ class TestTaskUpload(unittest.TestCase):
         the local database record's `self.monitor.db.TASKS_GCP_TARFILE` attribute actually exists
         at the indicated location.
         """
-        rec = self.monitor.db.get_run(name=self.run_name)
-        gcp_tarfile = rec[self.monitor.db.TASKS_GCP_TARFILE]
+        gcp_tarfile = self.rec[self.monitor.db.TASKS_GCP_TARFILE]
         # gcp_tarfile has 'bucket_name/' at the beginnig of the path - need to remove that.
         gcp_tarfile = gcp_tarfile.split("/", 1)[-1]
         blob = self.monitor.bucket.get_blob(gcp_tarfile)
@@ -313,10 +312,9 @@ class TestFirestore(unittest.TestCase):
         attribute's value is what we expect.
         """
         self.monitor.process_completed_run(run_name=self.run_name, archive=False)
-        fs_doc_ref = self.monitor.firestore_coll.document(self.run_name).get()
-        fs_doc = fs_doc_ref.to_dict()
-        local_rec = self.monitor.db.get_run(name=self.run_name)
-        self.assertEqual(fs_doc[srm.FIRESTORE_ATTR_WF_STATUS], self.monitor.RUN_STATUS_COMPLETE)
+        doc_ref = self.monitor.firestore_coll.document(self.run_name).get()
+        doc = doc_ref.to_dict()
+        self.assertEqual(doc[srm.FIRESTORE_ATTR_WF_STATUS], self.monitor.RUN_STATUS_COMPLETE)
 
     def test_tarfile_path(self):
         """
