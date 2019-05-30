@@ -41,7 +41,7 @@ setup(
     "psutil"
   ],
   long_description = long_description,
-  long_description_content_type = "text/markdown",
+  long_description_content_type = "text/x-rst",
   name = "sruns-monitor",
   packages = find_packages(),
   package_data = {"sruns_monitor": [os.path.join("tests", "data", "*")]},
@@ -49,5 +49,5 @@ setup(
       "Read the Docs": "https://sruns-monitor.readthedocs.io/en/latest",
   },
   scripts = scripts,
-  version = "0.1.0"
+  version = "0.1.3"
 )
