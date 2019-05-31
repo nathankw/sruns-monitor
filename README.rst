@@ -168,3 +168,4 @@ Then, you run the tests like so::
 
   python3 monitor_integration_tests.py
 
+Note that you should be using a Google service account as described above. 
