@@ -41,13 +41,6 @@ class TestStatus(unittest.TestCase):
         """
         os.remove(self.dbname)
 
-    def test_scan(self):
-        """
-        Tests `Monitor.scan` for success. It should find only the completed run directories.
-        """
-        rundirs = self.monitor.scan()
-        self.assertEqual(rundirs, ["CompletedRun1", "CompletedRun2", "TEST_RUN_DIR"])
-
     def test_status_new_run(self):
         """
         When we don't have a record for a given run in the database, we should get the status
@@ -64,7 +57,7 @@ class TestStatus(unittest.TestCase):
         """
         run_name = "testrun"
         self.db.insert_run(name=run_name, tarfile="run.tar.gz", gcp_tarfile="/bucket/obj.tar.gz")
-        status = self.get_run_status(run_name)
+        status = self.db.get_run_status(run_name)
         self.assertEqual(status, self.db.RUN_STATUS_COMPLETE)
 
     def test_status_not_running_1(self):
@@ -97,7 +90,7 @@ class TestStatus(unittest.TestCase):
         run_name = "testrun"
         self.db.insert_run(name=run_name, tarfile="run.tar.gz", gcp_tarfile="", pid=os.getpid())
         status = self.db.get_run_status(run_name)
-        self.assertEqual(status, self.db.RUN_STATUS_STARTING)
+        self.assertEqual(status, self.db.RUN_STATUS_RUNNING)
 
 
 

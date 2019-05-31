@@ -52,6 +52,8 @@ class Monitor:
         if not os.path.exists(self.watchdir):
             raise ConfigException("'watchdir' is a required property and the referenced directory must exist.".format(self.watchdir))
         self.completed_runs_dir = self.conf.get(srm.C_COMPLETED_RUNS_DIR)
+        if not self.completed_runs_dir:
+            self.completed_runs_dir = os.path.join(os.path.dirname(self.watchdir), "SRM_COMPLETED")
         if not os.path.exists(self.completed_runs_dir):
             os.mkdir(self.completed_runs_dir)
         #: The number of seconds to wait between run directory scans, with a default of 60.
@@ -357,12 +359,12 @@ class Monitor:
             elif run_status == self.db.RUN_STATUS_COMPLETE:
                 self.process_completed_run(run_name)
             elif run_status == self.db.RUN_STATUS_RUNNING:
+                # Check if it has been running for too long.
                 rec = self.db.get_run(run_name)
                 pid = rec[self.db.TASK_PID]
                 if self.kill_childprocess_if_running_to_long(pid):
                     # Send email notification 
                     pass
-        except psutil.NoSuchProcess:
             elif run_status == self.db.RUN_STATUS_NOT_RUNNING:
                 self.run_workflow(run_name)
 

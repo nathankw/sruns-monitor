@@ -107,7 +107,10 @@ class Db:
         # Check if running
         try:
             process = utils.get_process(pid)
-            return self.RUN_STATUS_RUNNING
+            if process:
+                return self.RUN_STATUS_RUNNING
+            else:
+                return self.RUN_STATUS_NOT_RUNNING
         except psutil.NoSuchProcess:
             return self.RUN_STATUS_NOT_RUNNING
 

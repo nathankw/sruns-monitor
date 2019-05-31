@@ -49,9 +49,10 @@ This is a small JSON file that lets the monitor know things such as which GCP bu
 collection to use, for example.  The possible keys are:
 
   * `watchdir`: (Required) The directory to monitor for new sequencing runs.
-  * `completed_runs_dir`: (Required) The directory to move a run directory to after it has completed the 
-    workflow. At present, there isn't a means to clean out the completed runs directory, but that
-    will come in a future release. 
+  * `completed_runs_dir`:  The directory to move a run directory to after it has completed the 
+    workflow. Defaults to a folder by the name 'SRM_COMPLETED` that resides within the same 
+    directory as the one being watched. Note that at present, there isn't a means to clean out the 
+    completed runs directory, but that will come in a future release. 
   * `sqlite_db`: The name of the local SQLite database to use for tracking workflow state. 
     Defaults to *sruns.db* if not specified. 
   * `firestore_collection`: (Required) The name of the Google Firestore collection to use for 

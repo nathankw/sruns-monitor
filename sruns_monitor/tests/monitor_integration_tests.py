@@ -8,24 +8,72 @@
 ###
 
 """
-Tests functions in the ``sruns_monitor.monitor`` module.
+Tests functions in the ``sruns_monitor.monitor`` module. Because these are functional/integrational
+tests, some user input is required in the form of a JSON configuration file. This should contain
+a subset of the fields in the configuration file expected by the Monitor. Below is an example of
+what is expected:
+
+{                                                                                                      
+  "firestore_collection": "sequencing_runs",                                                           
+  "gcp_bucket_name": "nathankw-testcgs",                                                               
+  "gcp_bucket_basedir": "/",                                                                           
+  "cycle_pause_sec": 60,                                                                               
+  "task_runtime_limit_sec": 86400                                                                      
+}
+
+This file must be named conf.json and must exist in the calling directory. 
 """
 
+import hashlib
+import json
+import os
+import unittest
+
+import sruns_monitor as srm
+from sruns_monitor.tests import WATCH_DIR, TMP_DIR
+from sruns_monitor import utils
+from sruns_monitor.monitor import Monitor
+
+#: The name of configuration file in JSON format that is used to instantiate the Monitor class. 
+#: This file must exist in the calling directory.
+CONF_FILE = "conf.json"
+SQLITE_DB = os.path.join(os.path.dirname(__file__), "monitortest.db")
+if os.path.exists(SQLITE_DB):
+    os.remove(SQLITE_DB)
+
+def process_user_conf_file():
+    fh = open(CONF_FILE)
+    jconf = json.loads(fh.read())
+    fh.close()
+    jconf[srm.C_WATCHDIR] = WATCH_DIR
+    jconf[srm.C_SQLITE_DB] = SQLITE_DB
+    fout = open(CONF_FILE, "w")
+    fout.write(json.dumps(jconf, indent=4))
+    fout.close()
+
+process_user_conf_file()
 
 class TestTaskTar(unittest.TestCase):
 
     def setUp(self):
         """
-        Creates a `Monitor` instance before each test runs.  The SQLite database specified by the 
+        Creates a `Monitor` instance before each test runs.  The SQLite database specified by the
         conf file is created when the Monitor is instantiated, and a record is written with only
         its name attribute set. Then, the tar task executes. Once that completes, the SQLite
-        record is stored as `self.rec` for inspection in the various test methods. 
+        record is stored as `self.rec` for inspection in the various test methods.
         """
         self.monitor = Monitor(conf_file=CONF_FILE)
         self.run_name = "CompletedRun1" # An actual test run directory
         self.monitor.db.insert_run(name=self.run_name)
         self.monitor.task_tar(state=self.monitor.state, run_name=self.run_name, lock=self.monitor.lock)
         self.rec = self.monitor.db.get_run(name=self.run_name)
+
+    def test_scan(self):
+        """
+        Tests `Monitor.scan` for success. It should find only the completed run directories.
+        """
+        rundirs = self.monitor.scan()
+        self.assertEqual(rundirs, ["CompletedRun1", "CompletedRun2", "TEST_RUN_DIR"])
 
     def tearDown(self):
         """
@@ -34,14 +82,14 @@ class TestTaskTar(unittest.TestCase):
         if os.path.exists(SQLITE_DB):
             os.remove(SQLITE_DB)
         os.remove(self.rec[self.monitor.db.TASKS_TARFILE])
-         
+
 
     def test_task_tar_pid_set(self):
         """
         Makes sure that when tarring a run directory, the pid of the child process is inserted into
         the SQLite record. Note in this case, the tarring method is run in the same thread, which
         is fine since this test is chiefly concerned with verifying that the pid attribute
-        of the record is set. 
+        of the record is set.
         """
         pid = self.rec[self.monitor.db.TASKS_PID]
         self.assertTrue(pid > 0)
@@ -70,12 +118,12 @@ class TestTaskUpload(unittest.TestCase):
 
     def setUp(self):
         """
-        Create a `Monitor` instance before each test runs.  The SQLite database specified by the 
+        Create a `Monitor` instance before each test runs.  The SQLite database specified by the
         conf file is created when the Monitor is instantiated. A run record is inserted into
         the database with a value already set for the local tarfile path, which points to a tarfile
         that is also created each time before a test runs as `Monitor.task_upload` removes the local
         tarfile before exiting.  Then, the upload task executes. Once that completes, the SQLite
-        record is stored as `self.rec` for inspection in the various test methods. 
+        record is stored as `self.rec` for inspection in the various test methods.
         """
         self.monitor = Monitor(conf_file=CONF_FILE)
         self.run_name = "CompletedRun1" # An actual test run directory
@@ -141,12 +189,12 @@ class TestFirestore(unittest.TestCase):
 
     def setUp(self):
         """
-        Create a `Monitor` instance before each test runs.  The SQLite database specified by the 
+        Create a `Monitor` instance before each test runs.  The SQLite database specified by the
         conf file is created when the Monitor is instantiated. A run record is inserted into
-        the local SQLite database with a value set for the name only. Also, a Firestore record is 
-        created that initially sets the run name attribute, as well as the workflow status attribute 
+        the local SQLite database with a value set for the name only. Also, a Firestore record is
+        created that initially sets the run name attribute, as well as the workflow status attribute
         to starting.
-        
+
         """
         self.monitor = Monitor(conf_file=CONF_FILE)
         self.run_name = "CompletedRun1" # An actual test run directory
@@ -168,7 +216,7 @@ class TestFirestore(unittest.TestCase):
     def test_status_tar_complete(self):
         """
         Tests that after tarring is complete, the Firestore record's `sruns_monitor.FIRESTORE_ATTR_WF_STATUS`
-        attribute is set to `Monitor.db.RUN_STATUS_TARRING_COMPLETE`. 
+        attribute is set to `Monitor.db.RUN_STATUS_TARRING_COMPLETE`.
         """
         self.monitor.task_tar(state=self.monitor.state, run_name=self.run_name, lock=self.monitor.lock)
         doc_ref = self.monitor.firestore_coll.document(self.run_name).get()
@@ -177,8 +225,8 @@ class TestFirestore(unittest.TestCase):
 
     def test_status_upload_complete(self):
         """
-        Tests that after uploading the tarfile to GCP is complete, the Firestore record's 
-        `sruns_monitor.FIRESTORE_ATTR_WF_STATUS` attribute is set to `Monitor.db.RUN_STATUS_UPLOADING_COMPLETE`. 
+        Tests that after uploading the tarfile to GCP is complete, the Firestore record's
+        `sruns_monitor.FIRESTORE_ATTR_WF_STATUS` attribute is set to `Monitor.db.RUN_STATUS_UPLOADING_COMPLETE`.
         """
         self.monitor.task_tar(state=self.monitor.state, run_name=self.run_name, lock=self.monitor.lock)
         self.monitor.task_upload(state=self.monitor.state, run_name=self.run_name, lock=self.monitor.lock)
@@ -188,8 +236,8 @@ class TestFirestore(unittest.TestCase):
 
     def test_status_complete(self):
         """
-        Tests that after running the entire workflow, the Firestore record's 
-        `sruns_monitor.FIRESTORE_ATTR_WF_STATUS` attribute is set to `Monitor.db.RUN_STATUS_COMPLETE`. 
+        Tests that after running the entire workflow, the Firestore record's
+        `sruns_monitor.FIRESTORE_ATTR_WF_STATUS` attribute is set to `Monitor.db.RUN_STATUS_COMPLETE`.
 
         Calls `monitor.Monitor.process_completed_run()`, which updates two attributes in Firestore:
 
@@ -207,9 +255,9 @@ class TestFirestore(unittest.TestCase):
 
     def test_tarfile_path(self):
         """
-        Tests that after running the entire workflow, the Firestore record's 
+        Tests that after running the entire workflow, the Firestore record's
         `sruns_monitor.FIRESTORE_ATTR_STORAGE` attribute is set to the same value as designated in
-        the local SQLite record. 
+        the local SQLite record.
 
         Calls `monitor.Monitor.process_completed_run()`, which updates two attributes in Firestore:
 
@@ -229,26 +277,4 @@ class TestFirestore(unittest.TestCase):
 
 
 if __name__ == "__main__":
-    import hashlib
-    import json
-    import multiprocessing
-    import os
-    import psutil
-    import time
-    import unittest
-    
-    import sruns_monitor as srm
-    from sruns_monitor.tests import WATCH_DIR, COMPLETED_RUNS_DIR, TMP_DIR
-    from sruns_monitor import utils
-    from sruns_monitor.monitor import Monitor
-    
-    SQLITE_DB = os.path.join(os.path.dirname(__file__), "monitortest.db")
-    if os.path.exists(SQLITE_DB):
-        os.remove(SQLITE_DB)
-
-    import argparser
-    parser = argparser.ArgumentParser()
-    parser.add_argument("-c", "--conf-file", required=True, help="The JSON configuration file.")
-    args = parser.parse_args()
-    CONF_FILE = args.conf_file
     unittest.main()
