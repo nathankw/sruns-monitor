@@ -24,6 +24,7 @@ with open("README.rst", "r") as fh:
 SCRIPTS_DIR = os.path.join("sruns_monitor", "scripts")
 scripts = glob.glob(os.path.join(SCRIPTS_DIR,"*.py"))
 scripts.remove(os.path.join(SCRIPTS_DIR,"__init__.py"))
+scripts.append("sruns_monitor/tests/monitor_integration_tests.py")
 
 setup(
   author = "Nathaniel Watson",
@@ -46,7 +47,6 @@ setup(
   packages = find_packages(),
   package_data = {"sruns_monitor": [
       os.path.join("tests", "SEQ_RUNS", "*")]
-      os.path.join("tests", "TMP", "*")]
   },
   project_urls = {
       "Read the Docs": "https://sruns-monitor.readthedocs.io/en/latest",
