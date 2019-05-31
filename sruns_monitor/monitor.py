@@ -42,27 +42,8 @@ class Monitor:
     #: The sential file can vary by sequencing platform. For NovaSeq, can use CopyComplete.txt.
     SENTINAL_FILES = set(["CopyComplete.txt"])
 
-    #: Status value for a new sequencing run. 
-    RUN_STATUS_NEW = "new"
-    #: Status value for a sequencing run that is running in the workflow. 
-    RUN_STATUS_STARTING = "starting"
-    #: Status value for a sequencing run that is in the tarring task
-    RUN_STATUS_TARRING = "tarring"
-    #: Status value for a sequencing run whose tarring task just completed
-    RUN_STATUS_TARRING_COMPLETE = "tarring_complete"
-    #: Status value for a sequencing run that is in the uploading task
-    RUN_STATUS_UPLOADING = "uploading"
-    #: Status value for a sequencing run whose uploading task just completed
-    RUN_STATUS_UPLOADING_COMPLETE = "uploading_complete"
-    #: Status value for a sequencing run that has completed the workflow. 
-    RUN_STATUS_COMPLETE = "complete"
-    #: Status value for a sequencing run that is has partially gone through the workflow, and the
-    #: workflow is no longer running. For example, the tarfile task ran but the upload to GCP 
-    #: task didn't because maybe it failed for some reason. 
-    RUN_STATUS_NOT_RUNNING = "not_running"
-
     def __init__(self, conf_file, verbose=False):
-        #: If True, then verbose logging is enabled. 
+        #: If True, then verbose logging is enabled.
         self.verbose = verbose
         self.conf = self._validate_conf(conf_file)
         self.gcp_storage_client = storage.Client()
@@ -84,8 +65,8 @@ class Monitor:
         #: The main process will check this queue in each scan iteration to report any child processes
         #: that have failed by means of logging and email notification.
         self.state = Queue() # Must pass in manually to multiprocessing.Process constructors.
-        #: A lock for safeguarding access to logging streams. 
-        self.lock = Lock() # Must pass in manually to multiprocessing.Process constructors 
+        #: A lock for safeguarding access to logging streams.
+        self.lock = Lock() # Must pass in manually to multiprocessing.Process constructors
         #: The GCP Storage bucket name in which tarred run directories will be stored.
         self.bucket_name = self.conf[srm.C_GCP_BUCKET_NAME]
         #: A `google.cloud.storage.bucket.Bucket` instance.
@@ -102,7 +83,7 @@ class Monitor:
         self.db = Db(dbname=self.conf.get(srm.C_SQLITE_DB, "sruns.db"), verbose=self.verbose)
 
         #: A reference to the `debug` logging instance that was created earlier in ``sruns_monitor.debug_logger``.
-        #: Here, a file handler is being added to it for logging all messages sent to it. 
+        #: Here, a file handler is being added to it for logging all messages sent to it.
         #: The log file resides locally within the directory specified by the constant
         #: ``sruns_monitor.LOG_DIR``.
         self.debug_logger = logging.getLogger(srm.DEBUG_LOGGER_NAME)
@@ -123,7 +104,7 @@ class Monitor:
         """
         conf_fh = open(conf_file)
         jconf = json.load(conf_fh)
-        conf_fh.close() 
+        conf_fh.close()
         schema_fh = open(srm.CONF_SCHEMA)
         jschema = json.load(schema_fh)
         schema_fh.close()
@@ -210,11 +191,11 @@ class Monitor:
             with lock:
                 self.debug_logger.debug("Tarring sequencing run {}.".format(run_name))
             # Update status of Firestore record
-            self.firestore_update_status(run_name=run_name, status=self.RUN_STATUS_TARRING)
+            self.firestore_update_status(run_name=run_name, status=self.db.RUN_STATUS_TARRING)
             tarball = utils.tar(rundir_path, tarball_name)
             self.db.update_run(name=run_name, payload={self.db.TASKS_TARFILE: tarball_name})
             # Update status of Firestore record
-            self.firestore_update_status(run_name=run_name, status=self.RUN_STATUS_TARRING_COMPLETE)
+            self.firestore_update_status(run_name=run_name, status=self.db.RUN_STATUS_TARRING_COMPLETE)
         except Exception as e:
             state.put((os.getpid(), e))
             # Let child process terminate as it would have so this error is spit out into
@@ -231,10 +212,10 @@ class Monitor:
         Once uploading is complete, the local database record is updated such that the attribute
         `sqlite_utils.Db.TASKS_GCP_TARFILE` is set to the location of the blob as a string value
         formatted as '$bucket_name/blob_path'.
-        Note that this method also updates the local database record to set the pid field with 
+        Note that this method also updates the local database record to set the pid field with
         the process ID its running in.
- 
-        Finally, the local tarfile is removed. 
+
+        Finally, the local tarfile is removed.
 
         Args:
             state: `multiprocessing.Queue` instance.
@@ -255,7 +236,7 @@ class Monitor:
             with lock:
                 self.debug_logger.debug("Uploading {} to GCP Storage bucket {} as {}.".format(tarfile,self.bucket, blob_name))
             # Update status of Firestore record
-            self.firestore_update_status(run_name=run_name, status=self.RUN_STATUS_UPLOADING)
+            self.firestore_update_status(run_name=run_name, status=self.db.RUN_STATUS_UPLOADING)
             utils.upload_to_gcp(bucket=self.bucket, blob_name=blob_name, source_file=tarfile)
             self.db.update_run(
                 name=run_name,
@@ -263,7 +244,7 @@ class Monitor:
             # Remove local tarfile
             os.remove(tarfile)
             # Update status of Firestore record
-            self.firestore_update_status(run_name=run_name, status=self.RUN_STATUS_UPLOADING_COMPLETE)
+            self.firestore_update_status(run_name=run_name, status=self.db.RUN_STATUS_UPLOADING_COMPLETE)
         except Exception as e:
             state.put((os.getpid(), e))
             # Let child process terminate as it would have so this error is spit out into
@@ -280,62 +261,20 @@ class Monitor:
         """
         return "/".join([self.bucket_basedir, run_name, os.path.basename(filename)]).lstrip("/")
 
-    def get_run_status(self, run_name):
+    def kill_childprocess_if_running_to_long(self, pid):
         """
-        Determines the state of the workflow for a given run based on the run record in the
-        database. This method has a potential side effect: If the workflow is running and the child
-        process encapsulating it has been running longer than a configurable number of seconds, then
-        this method will kill that child process prior to returning the run status.
-
         Args:
-            run_name: `str`. The name of a sequencing run.
+            pid: `int`. The process ID of a child process. 
 
         Returns:
-            `str`. One of the RUN_STATUS_* constants defined in the class `sruns_monitor.sqlite_utils.Db`.
+            `Boolean`. `True` if the process was killed (kill signal sent) False otherwise. 
         """
-        # Check for record in database
-        rec = self.db.get_run(run_name)
-        if not rec:
-            return self.RUN_STATUS_NEW
-        elif rec[self.db.TASKS_TARFILE] and rec[self.db.TASKS_GCP_TARFILE]:
-            return self.RUN_STATUS_COMPLETE
-        pid = rec[self.db.TASKS_PID]
-        if not pid:
-            return self.RUN_STATUS_NOT_RUNNING
-        # Check if running
-        try:
-            process = psutil.Process(pid)
-            if self.running_too_long(process):
+        process = utils.get_process(pid)
+        if process:
+            if utils.running_too_long(process, self.process_runtime_limit_sec):
                 process.kill()
-                # Send email
-            # If the process was running too long and got killed, then the next iteration of the
-            # monitor will see that the pid isn't running and restart the workflow. To be safe then,
-            # return a running status because we can't be sure that the kill signal worked just yet.
-            return self.RUN_STATUS_STARTING
-        except psutil.NoSuchProcess:
-            return self.RUN_STATUS_NOT_RUNNING
-
-    def running_too_long(self, process):
-        """
-        Indicates whether a child process has been running longer than a congifurable amount of time
-        that is set by the config variable identified by `sruns_monitor.C_TASK_RUNTIME_LIMIT_SEC`.
-        If that variable is not set, then this method always returns False. 
-
-        Args:
-           process: `psutil.Process` instance.
-
-        Returns:
-            `boolean`.
-        """
-        # Add check to make sure process hasn't been running for more than a configured
-        # amount of time.
-        if not self.process_runtime_limit_sec:
-            return False
-        created_at = process.create_time() # Seconds since epoch
-        process_age = (time.time() - created_at)
-        if process_age > self.process_runtime_limit_sec:
-            return True
-        return False
+                # The next iteration of the monitor will see that the pid isn't running and restart
+                # the workflow if it hasn't finished yet. 
 
     def archive_run(self, run_name):
         """
@@ -348,29 +287,29 @@ class Monitor:
 
     def process_new_run(self, run_name):
         """
-        Create a new record into the local sqlite db as well as the Firestore db. 
+        Create a new record into the local sqlite db as well as the Firestore db.
         """
         self.db.insert_run(name=run_name)
         # Create Firestore document
         firestore_payload = {
-            srm.FIRESTORE_ATTR_WF_STATUS: self.RUN_STATUS_STARTING
+            srm.FIRESTORE_ATTR_WF_STATUS: self.db.RUN_STATUS_STARTING
         }
         self.firestore_coll.document(run_name).set(firestore_payload)
         self.run_workflow(run_name)
 
     def process_completed_run(self, run_name, archive=True):
         """
-        Moves the run directory to the completed runs directory location that is defined 
-        by `sruns_monitor.C_COMPLETED_RUNS_DIR`. 
+        Moves the run directory to the completed runs directory location that is defined
+        by `sruns_monitor.C_COMPLETED_RUNS_DIR`.
 
-        Updates Firestore to set 
+        Updates Firestore to set
 
             * the GCP storage attribute (identified by the variable `sruns_monitor.FIRESTORE_ATTR_STORAGE`)
               to the location of the gzip tarfile of the run directory in GCP bucket storage. This
               value is extracted from the local record in the SQLite database, and is formatted as
               '$bucket_name/blob_path'.
             * the workflow status attribute (identified by the variable `sruns_monitor.FIRESTORE_ATTR_WF_STATUS`.
-              to completed. 
+              to completed.
 
         Args:
             run_name: `str`.
@@ -382,7 +321,7 @@ class Monitor:
             self.archive_run(run_name)
         # Update Firestore record
         firestore_payload = {
-            srm.FIRESTORE_ATTR_WF_STATUS: self.RUN_STATUS_COMPLETE,
+            srm.FIRESTORE_ATTR_WF_STATUS: self.db.RUN_STATUS_COMPLETE,
             srm.FIRESTORE_ATTR_STORAGE: rec[self.db.TASKS_GCP_TARFILE]
         }
         self.firestore_coll.document(run_name).update(firestore_payload)
@@ -412,14 +351,19 @@ class Monitor:
         """
         for run_name in run_names:
             self.debug_logger.debug("Processing rundir {}".format(run_name))
-            run_status = self.get_run_status(run_name)
-            if run_status == self.RUN_STATUS_NEW:
+            run_status = self.db.get_run_status(run_name)
+            if run_status == self.db.RUN_STATUS_NEW:
                 self.process_new_run(run_name)
-            elif run_status == self.RUN_STATUS_COMPLETE:
+            elif run_status == self.db.RUN_STATUS_COMPLETE:
                 self.process_completed_run(run_name)
-            elif run_status == self.RUN_STATUS_STARTING:
-                pass
-            elif run_status == self.RUN_STATUS_NOT_RUNNING:
+            elif run_status == self.db.RUN_STATUS_RUNNING:
+                rec = self.db.get_run(run_name)
+                pid = rec[self.db.TASK_PID]
+                if self.kill_childprocess_if_running_to_long(pid):
+                    # Send email notification 
+                    pass
+        except psutil.NoSuchProcess:
+            elif run_status == self.db.RUN_STATUS_NOT_RUNNING:
                 self.run_workflow(run_name)
 
     def start(self):

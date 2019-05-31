@@ -44,10 +44,13 @@ setup(
   long_description_content_type = "text/x-rst",
   name = "sruns-monitor",
   packages = find_packages(),
-  package_data = {"sruns_monitor": [os.path.join("tests", "data", "*")]},
+  package_data = {"sruns_monitor": [
+      os.path.join("tests", "SEQ_RUNS", "*")]
+      os.path.join("tests", "TMP", "*")]
+  },
   project_urls = {
       "Read the Docs": "https://sruns-monitor.readthedocs.io/en/latest",
   },
   scripts = scripts,
-  version = "0.1.3"
+  version = "0.1.10"
 )

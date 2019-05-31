@@ -8,7 +8,7 @@
 ###
 
 """
-Tests functions in the ``sruns_monitor.sqlite_utils`` module. 
+Tests functions in the ``sruns_monitor.sqlite_utils`` module.
 """
 
 import hashlib
@@ -20,21 +20,102 @@ from sruns_monitor.tests import WATCH_DIR, TMP_DIR
 from sruns_monitor import sqlite_utils
 
 
+class TestStatus(unittest.TestCase):
+    """
+    Tests `sqlite_utils.Db.get_run_status` for returning the correct workflow status value based on 
+    varying conditions in a database record. 
+    """
+
+    def setUp(self):
+        """
+        Creates a `sqlite_utils.Db` instance and associates that to the `self.db` attribute. 
+        The database name is referenced by `self.dbname`. The SQLite database will be created in the
+        temporary directory specified by `sqlite_utils.tests.TMP_DIR`. 
+        """
+        self.dbname = os.path.join(TMP_DIR, "test_sqlite_utils.db")
+        self.db = sqlite_utils.Db(dbname=self.dbname)
+
+    def tearDown(self):
+        """
+        Remove local SQLite database after each test runs.
+        """
+        os.remove(self.dbname)
+
+    def test_scan(self):
+        """
+        Tests `Monitor.scan` for success. It should find only the completed run directories.
+        """
+        rundirs = self.monitor.scan()
+        self.assertEqual(rundirs, ["CompletedRun1", "CompletedRun2", "TEST_RUN_DIR"])
+
+    def test_status_new_run(self):
+        """
+        When we don't have a record for a given run in the database, we should get the status
+        `sqlite_utis.Db.RUN_STATUS_NEW`.
+        """
+        status = self.db.get_run_status("CompletedRun1")
+        self.assertEqual(status, self.db.RUN_STATUS_NEW)
+
+    def test_status_run_complete(self):
+        """
+        When a record has a value set for each attribute that represents a workflow step result,
+        i.e. the tarfile path and the GCP Storage object path, `sqlite_utils.Db.get_run_status` 
+        should return the status `sqlite_utils.Db.RUN_STATUS_COMPLETE`.
+        """
+        run_name = "testrun"
+        self.db.insert_run(name=run_name, tarfile="run.tar.gz", gcp_tarfile="/bucket/obj.tar.gz")
+        status = self.get_run_status(run_name)
+        self.assertEqual(status, self.db.RUN_STATUS_COMPLETE)
+
+    def test_status_not_running_1(self):
+        """
+        When a record has a partially completed workflow and the PID value is not set,
+        `sqlite_utils.Db.get_run_status` should return the status `sqlite_utils.db.RUN_STATUS_NOT_RUNNING`.
+        """
+        run_name = "testrun"
+        self.db.insert_run(name=run_name, tarfile="run.tar.gz", gcp_tarfile="", pid=0)
+        status = self.db.get_run_status(run_name)
+        self.assertEqual(status, self.db.RUN_STATUS_NOT_RUNNING)
+
+    def test_status_not_running_2(self):
+        """
+        When a record has a partially completed workflow and the PID value is set but
+        that process doesn't actually exist, `sqlite_utils.Db.get_run_status` should return the
+        status `sqlite_utils.Db.RUN_STATUS_NOT_RUNNING`.
+        """
+        run_name = "testrun"
+        self.db.insert_run(name=run_name, tarfile="run.tar.gz", gcp_tarfile="", pid=1010101010)
+        status = self.db.get_run_status(run_name)
+        self.assertEqual(status, self.db.RUN_STATUS_NOT_RUNNING)
+
+    def test_status_running(self):
+        """
+        When a record has a partially completed workflow and the PID value is set and
+        that process exists, `sqlite_utils.Db.get_run_status` should return the status
+        `sqlite_utils.Db.RUN_STATUS_STARTING`.
+        """
+        run_name = "testrun"
+        self.db.insert_run(name=run_name, tarfile="run.tar.gz", gcp_tarfile="", pid=os.getpid())
+        status = self.db.get_run_status(run_name)
+        self.assertEqual(status, self.db.RUN_STATUS_STARTING)
+
+
+
 class TestDb(unittest.TestCase):
     """
-    Tests the class `sruns_monitor.Db`. 
+    Tests the record creation/modification methods in the class `sruns_monitor.Db`.
     """
 
     def setUp(self):
         self.dbfile = "test.db"
         # Instantiating the Db class should create the database and a tasks table.
         self.db = sqlite_utils.Db(self.dbfile)
-    
+
 
     def tearDown(self):
         self.db.curs.close() # Prevent 'sqlite3.OperationalError: database is locked' errors.
         os.remove(self.dbfile)
-      
+
     def test_db_exists(self):
         """
         Tests that the database file gets created when instantiating the `sruns_monitor.Db` class.
@@ -44,7 +125,7 @@ class TestDb(unittest.TestCase):
     def test_db_table_exists(self):
         """
         Tests that the database contains the table specified by the class variable
-        `sqlite_utils.Db.TASKS_TABLE_NAME`.  
+        `sqlite_utils.Db.TASKS_TABLE_NAME`.
         """
         tables = self.db.get_tables()
         self.assertTrue(sqlite_utils.Db.TASKS_TABLE_NAME in tables)
@@ -52,7 +133,7 @@ class TestDb(unittest.TestCase):
     def test_insert_run_attr_name(self):
         """
         Tests `sqlite_utls.Db.insert_run` for success when creating a new record with only the name
-        attribute set. 
+        attribute set.
         """
         run_name = "first_run"
         self.db.insert_run(name=run_name)
@@ -68,7 +149,7 @@ class TestDb(unittest.TestCase):
     def test_insert_run_attrs_name_pid(self):
         """
         Tests `sqlite_utls.Db.insert_run` for success when creating a new record with only the name
-        and pid attributes set. 
+        and pid attributes set.
         """
         run_name = "first_run"
         pid = 77103
@@ -121,7 +202,7 @@ class TestDb(unittest.TestCase):
             sqlite_utils.Db.TASKS_GCP_TARFILE: gcp_tarfile
         }
         self.assertTrue(rec == expected)
-           
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -26,6 +26,29 @@ class Db:
     #: 'tasks' table attribute name that stores the path to the gzip tarfile in a GCP Storage bucket.
     TASKS_GCP_TARFILE = "gcp_tarfile"
 
+    # Constants to define the status of a record.
+    #: Status value for a new sequencing run.                                                       
+    RUN_STATUS_NEW = "new"                                                                          
+    #: Status value for a sequencing run that is running in the workflow.                           
+    RUN_STATUS_STARTING = "starting"                                                                
+    #: Status value for a sequencing run that is 
+    RUN_STATUS_RUNNING = "running"                                                                
+    #: Status value for a sequencing run where the workflow is currently running for it and 
+    #: w/o specification as to which task. 
+    RUN_STATUS_TARRING = "tarring"                                                                  
+    #: Status value for a sequencing run whose tarring task just completed                          
+    RUN_STATUS_TARRING_COMPLETE = "tarring_complete"                                                
+    #: Status value for a sequencing run that is in the uploading task                              
+    RUN_STATUS_UPLOADING = "uploading"                                                              
+    #: Status value for a sequencing run whose uploading task just completed                        
+    RUN_STATUS_UPLOADING_COMPLETE = "uploading_complete"                                            
+    #: Status value for a sequencing run that has completed the workflow.                           
+    RUN_STATUS_COMPLETE = "complete"                                                                
+    #: Status value for a sequencing run that is has partially gone through the workflow, and the   
+    #: workflow is no longer running. For example, the tarfile task ran but the upload to GCP       
+    #: task didn't because maybe it failed for some reason.                                         
+    RUN_STATUS_NOT_RUNNING = "not_running" 
+
     def __init__(self, dbname, verbose=False):
         """
         Args:
@@ -60,6 +83,33 @@ class Db:
         if verbose and not self.verbose:
             return
         DBG_LGR.debug(msg)
+
+    def get_run_status(self, name):
+        """
+        Determines the state of the workflow for a given run based on the run record in the
+        database.
+
+        Args:
+            name: `str`. The name of a sequencing run.
+
+        Returns:
+            `str`. One of the RUN_STATUS_* constants defined in this class. 
+        """
+        # Check for record in database
+        rec = self.get_run(name)
+        if not rec:
+            return self.RUN_STATUS_NEW
+        elif rec[self.TASKS_TARFILE] and rec[self.TASKS_GCP_TARFILE]:
+            return self.RUN_STATUS_COMPLETE
+        pid = rec[self.TASKS_PID]
+        if not pid:
+            return self.RUN_STATUS_NOT_RUNNING
+        # Check if running
+        try:
+            process = utils.get_process(pid)
+            return self.RUN_STATUS_RUNNING
+        except psutil.NoSuchProcess:
+            return self.RUN_STATUS_NOT_RUNNING
 
     def insert_run(self, name, pid=0, tarfile="", gcp_tarfile=""):
         """

@@ -8,14 +8,14 @@ import pdb
 
 import sruns_monitor as srm
 
-DBG_LGR = logging.getLogger(srm.DEBUG_LOGGER_NAME)                                                     
-ERR_LGR = logging.getLogger(srm.ERROR_LOGGER_NAME) 
+DBG_LGR = logging.getLogger(srm.DEBUG_LOGGER_NAME)
+ERR_LGR = logging.getLogger(srm.ERROR_LOGGER_NAME)
 
 def get_logfile_name(tag):
     """
     Creates a name for a log file that is meant to be used in a call to
     ``logging.FileHandler``. The log file name will incldue the path to the log directory given
-    by the ``sruns_monitor.LOG_DIR`` constant. The format of the file name is: 'log_$TAG.txt', where 
+    by the ``sruns_monitor.LOG_DIR`` constant. The format of the file name is: 'log_$TAG.txt', where
     $TAG is the value of the 'tag' argument. The log directory will be created if need be.
 
     Args:
@@ -86,5 +86,38 @@ def upload_to_gcp(bucket, blob_name, source_file):
     blob = bucket.blob(blob_name)
     return blob.upload_from_filename(source_file)
 
-if __name__ == "__main__":
-    tar(os.getcwd())
+def get_process(pid):
+    """
+    Args:
+        pid: `int`. The process ID of a process.
+
+    Returns:
+        `psutil.Process`: There is a process that exists in the system process table.
+        `None`: There is not a process that exists in the system process table.
+    """
+    try:
+        process = psutil.Process(pid)
+        return process
+    except psutil.NoSuchProcess:
+        return None
+
+def running_too_long(process, limit_seconds=None):
+    """
+    Indicates whether a process has been running longer than a specified amount of time
+    in seconds.
+
+    Args:
+       process: `psutil.Process` instance.
+       limit_seconds: `int`. Number of seconds. If the process has
+           been running longer than this amount of seconds, this function will return True.
+
+    Returns:
+        `boolean`.
+    """
+    if not limit_seconds:
+        return False
+    created_at = process.create_time() # Seconds since epoch
+    process_age = (time.time() - created_at)
+    if process_age > limit_seconds:
+        return True
+    return False

@@ -8,7 +8,7 @@
 ###
 
 """
-Tests functions in the ``sruns_monitor.utils`` module. 
+Tests functions in the ``sruns_monitor.utils`` module.
 """
 
 import hashlib
@@ -33,7 +33,7 @@ class TestUtils(unittest.TestCase):
         """
         Tests that `utils.tar()` doesn't miss any files in the tarball. Tars the run directory at
         `self.test_rundir` and compares the list of files in the tarball with that which we expect
-        to find. Removes the tarball it creates before exiting. 
+        to find. Removes the tarball it creates before exiting.
         """
         output_file = os.path.join(TMP_DIR, os.path.basename(self.test_rundir + ".tar.gz"))
         utils.tar(input_dir=self.test_rundir, tarball_name=output_file)
@@ -45,6 +45,36 @@ class TestUtils(unittest.TestCase):
         ]
         os.remove(output_file)
         self.assertEqual(file_list, expected_file_list)
+
+    def test_running_too_long(self):
+        """
+        Tests that the method `monitor.Monitor.running_too_long` returns True when a child task
+        runs for more than the configured amount of time.
+        """
+
+        def child_task():
+            time.sleep(3)
+
+        # Make process limit 1 second
+        p = multiprocessing.Process(target=child_task)
+        p.start()
+        time.sleep(1)
+        self.assertTrue(utils.running_too_long(process=psutil.Process(p.pid), limit_sec=1))
+
+    def test_not_running_too_long(self):
+        """
+        Tests that the method `monitor.Monitor.running_too_long` returns False when a child task
+        runs for less than the configured amount of time.
+        """
+
+        def child_task():
+            time.sleep(3)
+
+        # Make process limit 1 second
+        p = multiprocessing.Process(target=child_task)
+        p.start()
+        time.sleep(1)
+        self.assertFalse(utils.running_too_long(process=psutil.Process(p.pid), 5))
 
 
 
