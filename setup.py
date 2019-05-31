@@ -52,5 +52,5 @@ setup(
       "Read the Docs": "https://sruns-monitor.readthedocs.io/en/latest",
   },
   scripts = scripts,
-  version = "0.2.0"
+  version = "0.2.1"
 )

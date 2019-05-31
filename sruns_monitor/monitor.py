@@ -379,6 +379,8 @@ class Monitor:
                 # "Killing the zombies: Don't fear the reaper!".
                 try:
                     os.waitpid(0, os.WNOHANG)
+                    # The 0 argument above means to check for any child process, not one with a
+                    # specific pid.
                 except ChildProcessError:
                     pass # No child processes
                 finished_rundirs = self.scan()

@@ -99,7 +99,7 @@ There is a record in the collection for each sequencing run. The possible fields
   * `name`: The name of the sequencing run. This mirrors the value of the same attribute in the
     analagous SQLite database record.
   * `storage`: Bucket storage object path for the tarred run directory in the
-    form bucket_name/path/to/run.tar.gz
+    form $bucket_name/path/to/run.tar.gz
   * `workflow_status`: The overall status of the worklfow. Possible values are:
 
     * `new`
@@ -166,6 +166,6 @@ mock run directories. The parameters you should provide in the conf.json file fo
 
 Then, you run the tests like so::
 
-  python3 monitor_integration_tests.py
+  monitor_integration_tests.py
 
 Note that you should be using a Google service account as described above. 
