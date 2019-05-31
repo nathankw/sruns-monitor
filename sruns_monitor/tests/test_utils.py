@@ -13,8 +13,11 @@ Tests functions in the ``sruns_monitor.utils`` module.
 
 import hashlib
 import json
+import multiprocessing
 import os
+import psutil
 import tarfile
+import time
 import unittest
 
 from sruns_monitor.tests import WATCH_DIR, TMP_DIR
@@ -59,7 +62,7 @@ class TestUtils(unittest.TestCase):
         p = multiprocessing.Process(target=child_task)
         p.start()
         time.sleep(1)
-        self.assertTrue(utils.running_too_long(process=psutil.Process(p.pid), limit_sec=1))
+        self.assertTrue(utils.running_too_long(process=psutil.Process(p.pid), limit_seconds=1))
 
     def test_not_running_too_long(self):
         """
@@ -74,7 +77,7 @@ class TestUtils(unittest.TestCase):
         p = multiprocessing.Process(target=child_task)
         p.start()
         time.sleep(1)
-        self.assertFalse(utils.running_too_long(process=psutil.Process(p.pid), 5))
+        self.assertFalse(utils.running_too_long(process=psutil.Process(p.pid), limit_seconds=5))
 
 
 
