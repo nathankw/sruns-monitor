@@ -161,7 +161,7 @@ That is because within the `tests` package directory, it includes its own watch 
 mock run directories. The parameters you should provide in the conf.json file for testing are:
 
   * firestore_collection
-  * gcp_bucket_name"
+  * gcp_bucket_name
   * gcp_bucket_basedir
 
 Then, you run the tests like so::
