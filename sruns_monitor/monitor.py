@@ -84,20 +84,11 @@ class Monitor:
         #: structure of records in this database.
         self.db = Db(dbname=self.conf.get(srm.C_SQLITE_DB, "sruns.db"), verbose=self.verbose)
 
-        #: A reference to the `debug` logging instance that was created earlier in ``sruns_monitor.debug_logger``.
-        #: Here, a file handler is being added to it for logging all messages sent to it.
-        #: The log file resides locally within the directory specified by the constant
-        #: ``sruns_monitor.LOG_DIR``.
-        self.debug_logger = logging.getLogger(srm.DEBUG_LOGGER_NAME)
-        # Add debug file handler to debug_logger:
-        utils.add_file_handler(logger=self.debug_logger, level=logging.DEBUG, tag="debug")
-
-        #: A reference to the `error` logging instance that was created earlier in ``sruns_monitor.error_logger``.
-        #: Here, a file handler is being added to it for logging terse error messages.
-        #: The log file resides locally within the directory specified by the constant
-        #: ``sruns_monitor.LOG_DIR``. Accepts messages >= ``logging.ERROR``.
-        self.error_logger = logging.getLogger(srm.ERROR_LOGGER_NAME)
-        utils.add_file_handler(logger=self.error_logger, level=logging.ERROR, tag="error")
+        self.logger = logging.getLogger(__name__)
+        # Add debug file handler to self.logger:
+        srm.add_file_handler(logger=self.logger, level=logging.DEBUG, tag="debug")
+        # Add error file handler to self.logger:
+        srm.add_file_handler(logger=self.logger, level=logging.ERROR, tag="error")
 
     def _validate_conf(self, conf_file):
         """
@@ -113,14 +104,6 @@ class Monitor:
         jsonschema.validate(jconf, jschema)
         return jconf
 
-    def log_error(self, msg):
-        """
-        Logs the provided message to the 'error' and 'debug' logging instances.
-        """
-        self.error_logger.error(msg)
-        self.debug_logger.debug(msg)
-
-
     def _cleanup(self, signum, frame):
         """
         Terminate all child processes. Normally this is called when a SIGTERM is caught
@@ -132,7 +115,7 @@ class Monitor:
                 handler for a specific type of signal in the funtion `signal.signal`.
         """
         signame = signal.Signals(signum).name
-        self.log_error(msg="Caught signal {}. Preparing for shutdown.".format(signame))
+        self.logger.error("Caught signal {}. Preparing for shutdown.".format(signame))
         # email notification
         pid = os.getpid()
         child_processes = psutil.Process().children()
@@ -191,7 +174,7 @@ class Monitor:
             rundir_path = self.get_rundir_path(run_name)
             tarball_name = rundir_path + ".tar.gz"
             with lock:
-                self.debug_logger.debug("Tarring sequencing run {}.".format(run_name))
+                self.logger.debug("Tarring sequencing run {}.".format(run_name))
             # Update status of Firestore record
             self.firestore_update_status(run_name=run_name, status=self.db.RUN_STATUS_TARRING)
             tarball = utils.tar(rundir_path, tarball_name)
@@ -236,7 +219,7 @@ class Monitor:
             # Upload tarfile to GCP bucket
             blob_name = self.create_blob_name(run_name=run_name, filename=tarfile)
             with lock:
-                self.debug_logger.debug("Uploading {} to GCP Storage bucket {} as {}.".format(tarfile,self.bucket, blob_name))
+                self.logger.debug("Uploading {} to GCP Storage bucket {} as {}.".format(tarfile,self.bucket, blob_name))
             # Update status of Firestore record
             self.firestore_update_status(run_name=run_name, status=self.db.RUN_STATUS_UPLOADING)
             utils.upload_to_gcp(bucket=self.bucket, blob_name=blob_name, source_file=tarfile)
@@ -284,7 +267,7 @@ class Monitor:
         """
         from_path = self.get_rundir_path(run_name)
         to_path = os.path.join(self.completed_runs_dir, run_name)
-        self.debug_logger.debug("Moving run {run} to completed runs location {loc}.".format(run=run_name, loc=to_path))
+        self.logger.debug("Moving run {run} to completed runs location {loc}.".format(run=run_name, loc=to_path))
         os.rename(from_path, to_path)
 
     def process_new_run(self, run_name):
@@ -352,7 +335,7 @@ class Monitor:
         any remaining steps, i.e. restart, cleanup, ...
         """
         for run_name in run_names:
-            self.debug_logger.debug("Processing rundir {}".format(run_name))
+            self.logger.debug("Processing rundir {}".format(run_name))
             run_status = self.db.get_run_status(run_name)
             if run_status == self.db.RUN_STATUS_NEW:
                 self.process_new_run(run_name)
@@ -395,12 +378,12 @@ class Monitor:
                 if child_process_msg:
                     pid = child_process_msg[0]
                     msg = child_process_msg[1]
-                    self.log_error(msg="Process {} exited with message '{}'.".format(pid, msg))
+                    self.logger.error("Process {} exited with message '{}'.".format(pid, msg))
                     # Email notification
                 time.sleep(self.cycle_pause_sec)
         except Exception as e:
             # Email notification
-            self.log_error(msg="Main process Exception: {}".format(e))
+            self.logger.error("Main process Exception: {}".format(e))
             raise
 
 ### Example

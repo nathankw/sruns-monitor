@@ -10,9 +10,6 @@ import sruns_monitor as srm
 import sruns_monitor.utils as utils
 import pdb
 
-DBG_LGR = logging.getLogger(srm.DEBUG_LOGGER_NAME)
-ERR_LGR = logging.getLogger(srm.ERROR_LOGGER_NAME)
-
 class Db:
     #: The name of the table that stores workflow state for each sequencing run. 
     TASKS_TABLE_NAME = "tasks"
@@ -49,6 +46,8 @@ class Db:
     #: task didn't because maybe it failed for some reason.                                         
     RUN_STATUS_NOT_RUNNING = "not_running" 
 
+    logger = logging.getLogger(__name__)
+
     def __init__(self, dbname, verbose=False):
         """
         Args:
@@ -82,7 +81,7 @@ class Db:
     def log(self, msg, verbose=False):
         if verbose and not self.verbose:
             return
-        DBG_LGR.debug(msg)
+        self.logger.debug(msg)
 
     def get_run_status(self, name):
         """
