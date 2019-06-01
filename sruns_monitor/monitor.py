@@ -47,7 +47,10 @@ class Monitor:
         self.verbose = verbose
         self.conf = self._validate_conf(conf_file)
         self.gcp_storage_client = storage.Client()
-        self.firestore_coll = firestore.Client().collection(self.conf["firestore_collection"])
+        #: The name of the Firestore collection to use. 
+        self.firestore_collection = self.conf["firestore_collection"]
+        #: The Firestore connection to be used by the main thread only. 
+        self.firestore = firestore.Client().collection(self.firestore_collection)
         self.watchdir = self.conf[srm.C_WATCHDIR]
         if not os.path.exists(self.watchdir):
             raise ConfigException("'watchdir' is a required property and the referenced directory must exist.".format(self.watchdir))
@@ -147,11 +150,16 @@ class Monitor:
             self.task_upload(state=state, run_name=run_name, lock=lock)
 
     def firestore_update_status(self, run_name, status):
-        # Update status of Firestore record
+        """
+        Update the status of a Firestore record. This method creates its own connection to the 
+        Firestore database since child processes can call this method; hence, it does not use
+        `self.firestore_connection`.
+        """
+        firestore_coll = firestore.Client().collection(self.firestore_collection)
         firestore_payload = {
             srm.FIRESTORE_ATTR_WF_STATUS: status
         }
-        self.firestore_coll.document(run_name).set(firestore_payload)
+        firestore_coll.document(run_name).set(firestore_payload)
 
     def task_tar(self, state,  run_name, lock ):
         """
@@ -279,7 +287,7 @@ class Monitor:
         firestore_payload = {
             srm.FIRESTORE_ATTR_WF_STATUS: self.db.RUN_STATUS_STARTING
         }
-        self.firestore_coll.document(run_name).set(firestore_payload)
+        self.firestore.document(run_name).set(firestore_payload)
         self.run_workflow(run_name)
 
     def process_completed_run(self, run_name, archive=True):
@@ -309,7 +317,7 @@ class Monitor:
             srm.FIRESTORE_ATTR_WF_STATUS: self.db.RUN_STATUS_COMPLETE,
             srm.FIRESTORE_ATTR_STORAGE: rec[self.db.TASKS_GCP_TARFILE]
         }
-        self.firestore_coll.document(run_name).update(firestore_payload)
+        self.firestore.document(run_name).update(firestore_payload)
 
     def run_workflow(self, run_name):
         p = Process(target=self._workflow, args=(self.state, self.lock, run_name))
