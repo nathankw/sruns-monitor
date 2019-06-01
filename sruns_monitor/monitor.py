@@ -46,7 +46,6 @@ class Monitor:
         #: If True, then verbose logging is enabled.
         self.verbose = verbose
         self.conf = self._validate_conf(conf_file)
-        self.gcp_storage_client = storage.Client()
         #: The name of the Firestore collection to use. 
         self.firestore_collection = self.conf["firestore_collection"]
         #: The Firestore connection to be used by the main thread only. 
@@ -74,9 +73,7 @@ class Monitor:
         self.lock = Lock() # Must pass in manually to multiprocessing.Process constructors
         #: The GCP Storage bucket name in which tarred run directories will be stored.
         self.bucket_name = self.conf[srm.C_GCP_BUCKET_NAME]
-        #: A `google.cloud.storage.bucket.Bucket` instance.
-        self.bucket = self.gcp_storage_client.get_bucket(self.bucket_name)
-        #: The directory in `self.bucket` in which to store tarred run directories. If not provided,
+        #: The directory in the bucket in which to store tarred run directories. If not provided,
         #: defaults to the root level directory.
         self.bucket_basedir = self.conf.get(srm.C_GCP_BUCKET_BASEDIR, "/")
         #signal.signal(signal.SIGTERM, self._cleanup)
@@ -106,6 +103,18 @@ class Monitor:
         schema_fh.close()
         jsonschema.validate(jconf, jschema)
         return jconf
+
+    def _validate_bucket(self):
+        """
+        Tries to create a `google.cloud.storage.bucket.Bucket` instance to ensure that we can
+        connect to the bucket designated by `self.bucket_name`. If we can here, then a child process 
+        should also be able to when it needs to. While we could store the bucket instance in our own 
+        instance variable, it's probably not safe to share these amongst child processes, so better 
+        to let each child process make it's own bucket instance. 
+        """
+        storage_client = storage.Client()
+        # A `google.cloud.storage.bucket.Bucket` instance.
+        self.client.get_bucket(self.bucket_name)
 
     def _cleanup(self, signum, frame):
         """
@@ -226,11 +235,14 @@ class Monitor:
                 raise MissingTarfile("Run {} does not have a tarfile.".format(run_name))
             # Upload tarfile to GCP bucket
             blob_name = self.create_blob_name(run_name=run_name, filename=tarfile)
+            storage_client = storage.Client()
+            # A `google.cloud.storage.bucket.Bucket` instance.
+            bucket = storage_client.get_bucket(self.bucket_name)
             with lock:
-                self.logger.debug("Uploading {} to GCP Storage bucket {} as {}.".format(tarfile,self.bucket, blob_name))
+                self.logger.debug("Uploading {} to GCP Storage bucket {} as {}.".format(tarfile,bucket, blob_name))
             # Update status of Firestore record
             self.firestore_update_status(run_name=run_name, status=self.db.RUN_STATUS_UPLOADING)
-            utils.upload_to_gcp(bucket=self.bucket, blob_name=blob_name, source_file=tarfile)
+            utils.upload_to_gcp(bucket=bucket, blob_name=blob_name, source_file=tarfile)
             self.db.update_run(
                 name=run_name,
                 payload={self.db.TASKS_GCP_TARFILE: "/".join([self.bucket_name, blob_name])})
