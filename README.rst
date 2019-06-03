@@ -23,9 +23,9 @@ here assumes that you are since it is the recommended way. That's due to the fac
 must interact with certain GCP services, and hence must be running with proper Google credentials
 (i.e. a service account).
 
-The monitor script is named  *launch_monitor.py*; when running it you must provide it with the path
-to a JSON configuration file, described in detail further below. You should set up your compute
-instance to run this script as a daemon service.
+The monitor script is named `srun-mon` (a shim that calls the `main` function in  *launch_monitor.py*).
+When running this, you must provide a path to a JSON configuration file, described in detail further 
+below. You should set up your compute instance to run this script as a daemon service.
 
 The workflow is fitted into two tasks: the *tar task* and the *upload task*. When the monitor
 detects a new sequencing run, it executes the workflow in a child process. The workflow is smart

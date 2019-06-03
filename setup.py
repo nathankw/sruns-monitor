@@ -35,6 +35,11 @@ setup(
       "Operating System :: OS Independent",
   ],
   description = "Looks for new Illumina sequencing runs and tars them up into GCP storage",
+  entry_points = {
+      "console_scripts": [
+          "srun-mon= sruns_monitor.scripts.launch_monitor:main"
+      ]
+  },
   install_requires = [
     "google-cloud-firestore",
     "google-cloud-storage",
@@ -52,5 +57,5 @@ setup(
       "Read the Docs": "https://sruns-monitor.readthedocs.io/en/latest",
   },
   scripts = scripts,
-  version = "0.2.1"
+  version = "0.3.1"
 )
