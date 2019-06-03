@@ -14,7 +14,7 @@ a subset of the fields in the configuration file expected by the Monitor. Below 
 what is expected:
 
 {                                                                                                      
-  "firestore_collection": "sequencing_runs",                                                           
+  "firestore_collectionection": "sequencing_runs",                                                           
   "gcp_bucket_name": "nathankw-testcgs",                                                               
   "gcp_bucket_basedir": "/",                                                                           
   "cycle_pause_sec": 60,                                                                               
@@ -28,6 +28,8 @@ import hashlib
 import json
 import os
 import unittest
+
+from google.cloud import storage
 
 import sruns_monitor as srm
 from sruns_monitor.tests import WATCH_DIR, TMP_DIR
@@ -54,6 +56,10 @@ def process_user_conf_file():
 
 process_user_conf_file()
 
+def get_bucket(bucket_name):
+    storage_client = storage.Client()
+    return storage_client.get_bucket(bucket_name)
+
 class TestTaskTar(unittest.TestCase):
 
     def setUp(self):
@@ -65,9 +71,9 @@ class TestTaskTar(unittest.TestCase):
         """
         self.monitor = Monitor(conf_file=CONF_FILE)
         self.run_name = "CompletedRun1" # An actual test run directory
-        self.sqlite_conn_mainthread.insert_run(name=self.run_name)
+        self.monitor.sqlite_conn_mainthread.insert_run(name=self.run_name)
         self.monitor.task_tar(state=self.monitor.state, run_name=self.run_name, lock=self.monitor.lock, sqlite_conn=self.monitor.get_sqlite_conn())
-        self.rec = self.sqlite_conn_mainthread.get_run(name=self.run_name)
+        self.rec = self.monitor.sqlite_conn_mainthread.get_run(name=self.run_name)
 
     def test_scan(self):
         """
@@ -127,14 +133,15 @@ class TestTaskUpload(unittest.TestCase):
         record is stored as `self.rec` for inspection in the various test methods.
         """
         self.monitor = Monitor(conf_file=CONF_FILE)
+        self.bucket = get_bucket(self.monitor.bucket_name)
         self.run_name = "CompletedRun1" # An actual test run directory
         self.tarfile = os.path.join(TMP_DIR, "rundir.tar.gz")
         fh = open(self.tarfile, 'w')
         fh.write("test line")
         fh.close()
-        self.sqlite_conn_mainthread.insert_run(name=self.run_name, tarfile=self.tarfile)
+        self.monitor.sqlite_conn_mainthread.insert_run(name=self.run_name, tarfile=self.tarfile)
         self.monitor.task_upload(state=self.monitor.state, run_name=self.run_name, lock=self.monitor.lock, sqlite_conn=self.monitor.get_sqlite_conn())
-        self.rec = self.sqlite_conn_mainthread.get_run(name=self.run_name)
+        self.rec = self.monitor.sqlite_conn_mainthread.get_run(name=self.run_name)
 
     def tearDown(self):
         """
@@ -144,7 +151,7 @@ class TestTaskUpload(unittest.TestCase):
         if os.path.exists(SQLITE_DB):
             os.remove(SQLITE_DB)
         blob = self.monitor.create_blob_name(run_name=self.run_name, filename=self.tarfile)
-        self.monitor.bucket.delete_blob(blob) # raises google.api_core.exceptions.NotFound if blob doesn't exist.
+        self.bucket.delete_blob(blob) # raises google.api_core.exceptions.NotFound if blob doesn't exist.
 
     def test_task_upload_pid_set(self):
         """
@@ -181,7 +188,7 @@ class TestTaskUpload(unittest.TestCase):
         gcp_tarfile = self.rec[Db.TASKS_GCP_TARFILE]
         # gcp_tarfile has 'bucket_name/' at the beginnig of the path - need to remove that.
         gcp_tarfile = gcp_tarfile.split("/", 1)[-1]
-        blob = self.monitor.bucket.get_blob(gcp_tarfile)
+        blob = self.bucket.get_blob(gcp_tarfile)
         # blob is None if file doesn't exist in GCP, otherwise it's a Blob instance.
         self.assertTrue(bool(blob))
 
@@ -199,12 +206,12 @@ class TestFirestore(unittest.TestCase):
         """
         self.monitor = Monitor(conf_file=CONF_FILE)
         self.run_name = "CompletedRun1" # An actual test run directory
-        self.sqlite_conn_mainthread.insert_run(name=self.run_name)
+        self.monitor.sqlite_conn_mainthread.insert_run(name=self.run_name)
         # Create Firestore document
         firestore_payload = {
             srm.FIRESTORE_ATTR_WF_STATUS: Db.RUN_STATUS_STARTING
         }
-        self.monitor.firestore_coll.document(self.run_name).set(firestore_payload)
+        self.monitor.firestore.document(self.run_name).set(firestore_payload)
 
     def tearDown(self):
         """
@@ -212,7 +219,7 @@ class TestFirestore(unittest.TestCase):
         """
         if os.path.exists(SQLITE_DB):
             os.remove(SQLITE_DB)
-        self.monitor.firestore_coll.document(self.run_name).delete()
+        self.monitor.firestore.document(self.run_name).delete()
 
     def test_status_tar_complete(self):
         """
@@ -220,7 +227,7 @@ class TestFirestore(unittest.TestCase):
         attribute is set to `Db.RUN_STATUS_TARRING_COMPLETE`.
         """
         self.monitor.task_tar(state=self.monitor.state, run_name=self.run_name, lock=self.monitor.lock, sqlite_conn=self.monitor.get_sqlite_conn())
-        doc_ref = self.monitor.firestore_coll.document(self.run_name).get()
+        doc_ref = self.monitor.firestore.document(self.run_name).get()
         doc = doc_ref.to_dict()
         self.assertEqual(doc[srm.FIRESTORE_ATTR_WF_STATUS], Db.RUN_STATUS_TARRING_COMPLETE)
 
@@ -231,7 +238,7 @@ class TestFirestore(unittest.TestCase):
         """
         self.monitor.task_tar(state=self.monitor.state, run_name=self.run_name, lock=self.monitor.lock, sqlite_conn=self.monitor.get_sqlite_conn())
         self.monitor.task_upload(state=self.monitor.state, run_name=self.run_name, lock=self.monitor.lock, sqlite_conn=self.monitor.get_sqlite_conn())
-        doc_ref = self.monitor.firestore_coll.document(self.run_name).get()
+        doc_ref = self.monitor.firestore.document(self.run_name).get()
         doc = doc_ref.to_dict()
         self.assertEqual(doc[srm.FIRESTORE_ATTR_WF_STATUS], Db.RUN_STATUS_UPLOADING_COMPLETE)
 
@@ -250,7 +257,7 @@ class TestFirestore(unittest.TestCase):
         attribute's value is what we expect.
         """
         self.monitor.process_completed_run(run_name=self.run_name, archive=False)
-        doc_ref = self.monitor.firestore_coll.document(self.run_name).get()
+        doc_ref = self.monitor.firestore.document(self.run_name).get()
         doc = doc_ref.to_dict()
         self.assertEqual(doc[srm.FIRESTORE_ATTR_WF_STATUS], Db.RUN_STATUS_COMPLETE)
 
@@ -270,9 +277,9 @@ class TestFirestore(unittest.TestCase):
         attribute's value is what we expect.
         """
         self.monitor.process_completed_run(run_name=self.run_name, archive=False)
-        fs_doc_ref = self.monitor.firestore_coll.document(self.run_name).get()
+        fs_doc_ref = self.monitor.firestore.document(self.run_name).get()
         fs_doc = fs_doc_ref.to_dict()
-        local_rec = self.sqlite_conn_mainthread.get_run(name=self.run_name)
+        local_rec = self.monitor.sqlite_conn_mainthread.get_run(name=self.run_name)
         self.assertEqual(fs_doc[srm.FIRESTORE_ATTR_STORAGE], local_rec[Db.TASKS_GCP_TARFILE])
 
 

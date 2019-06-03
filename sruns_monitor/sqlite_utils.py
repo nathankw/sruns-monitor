@@ -188,7 +188,7 @@ class Db:
             input_name=name)
 
         self.log(msg=sql, verbose=True)
-        res = self.curs.execute(sql).fetchone()
+        res = self.conn.execute(sql).fetchone()
         if not res:
             return {}
         return {
@@ -210,7 +210,7 @@ class Db:
 
     def get_tables(self):
         sql = "SELECT name FROM sqlite_master where type='table';"
-        res = self.curs.execute(sql)
+        res = self.conn.execute(sql)
         # res is a list of one item tuples of the form [('tasks',)]
         tables = []
         for i in res:

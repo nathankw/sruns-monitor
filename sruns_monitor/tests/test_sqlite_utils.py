@@ -106,7 +106,7 @@ class TestDb(unittest.TestCase):
 
 
     def tearDown(self):
-        self.db.curs.close() # Prevent 'sqlite3.OperationalError: database is locked' errors.
+        self.db.conn.close() # Prevent 'sqlite3.OperationalError: database is locked' errors.
         os.remove(self.dbfile)
 
     def test_db_exists(self):
