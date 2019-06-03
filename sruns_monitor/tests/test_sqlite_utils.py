@@ -17,23 +17,23 @@ import os
 import unittest
 
 from sruns_monitor.tests import WATCH_DIR, TMP_DIR
-from sruns_monitor import sqlite_utils
+from sruns_monitor.sqlite_utils import Db
 
 
 class TestStatus(unittest.TestCase):
     """
-    Tests `sqlite_utils.Db.get_run_status` for returning the correct workflow status value based on 
+    Tests `Db.get_run_status` for returning the correct workflow status value based on 
     varying conditions in a database record. 
     """
 
     def setUp(self):
         """
-        Creates a `sqlite_utils.Db` instance and associates that to the `self.db` attribute. 
+        Creates a `Db` instance and associates that to the `self.db` attribute. 
         The database name is referenced by `self.dbname`. The SQLite database will be created in the
         temporary directory specified by `sqlite_utils.tests.TMP_DIR`. 
         """
         self.dbname = os.path.join(TMP_DIR, "test_sqlite_utils.db")
-        self.db = sqlite_utils.Db(dbname=self.dbname)
+        self.db = Db(dbname=self.dbname)
 
     def tearDown(self):
         """
@@ -47,50 +47,50 @@ class TestStatus(unittest.TestCase):
         `sqlite_utis.Db.RUN_STATUS_NEW`.
         """
         status = self.db.get_run_status("CompletedRun1")
-        self.assertEqual(status, self.db.RUN_STATUS_NEW)
+        self.assertEqual(status, Db.RUN_STATUS_NEW)
 
     def test_status_run_complete(self):
         """
         When a record has a value set for each attribute that represents a workflow step result,
-        i.e. the tarfile path and the GCP Storage object path, `sqlite_utils.Db.get_run_status` 
-        should return the status `sqlite_utils.Db.RUN_STATUS_COMPLETE`.
+        i.e. the tarfile path and the GCP Storage object path, `Db.get_run_status` 
+        should return the status `Db.RUN_STATUS_COMPLETE`.
         """
         run_name = "testrun"
         self.db.insert_run(name=run_name, tarfile="run.tar.gz", gcp_tarfile="/bucket/obj.tar.gz")
         status = self.db.get_run_status(run_name)
-        self.assertEqual(status, self.db.RUN_STATUS_COMPLETE)
+        self.assertEqual(status, Db.RUN_STATUS_COMPLETE)
 
     def test_status_not_running_1(self):
         """
         When a record has a partially completed workflow and the PID value is not set,
-        `sqlite_utils.Db.get_run_status` should return the status `sqlite_utils.db.RUN_STATUS_NOT_RUNNING`.
+        `Db.get_run_status` should return the status `Db.RUN_STATUS_NOT_RUNNING`.
         """
         run_name = "testrun"
         self.db.insert_run(name=run_name, tarfile="run.tar.gz", gcp_tarfile="", pid=0)
         status = self.db.get_run_status(run_name)
-        self.assertEqual(status, self.db.RUN_STATUS_NOT_RUNNING)
+        self.assertEqual(status, Db.RUN_STATUS_NOT_RUNNING)
 
     def test_status_not_running_2(self):
         """
         When a record has a partially completed workflow and the PID value is set but
-        that process doesn't actually exist, `sqlite_utils.Db.get_run_status` should return the
-        status `sqlite_utils.Db.RUN_STATUS_NOT_RUNNING`.
+        that process doesn't actually exist, `Db.get_run_status` should return the
+        status `Db.RUN_STATUS_NOT_RUNNING`.
         """
         run_name = "testrun"
         self.db.insert_run(name=run_name, tarfile="run.tar.gz", gcp_tarfile="", pid=1010101010)
         status = self.db.get_run_status(run_name)
-        self.assertEqual(status, self.db.RUN_STATUS_NOT_RUNNING)
+        self.assertEqual(status, Db.RUN_STATUS_NOT_RUNNING)
 
     def test_status_running(self):
         """
         When a record has a partially completed workflow and the PID value is set and
-        that process exists, `sqlite_utils.Db.get_run_status` should return the status
-        `sqlite_utils.Db.RUN_STATUS_STARTING`.
+        that process exists, `Db.get_run_status` should return the status
+        `Db.RUN_STATUS_STARTING`.
         """
         run_name = "testrun"
         self.db.insert_run(name=run_name, tarfile="run.tar.gz", gcp_tarfile="", pid=os.getpid())
         status = self.db.get_run_status(run_name)
-        self.assertEqual(status, self.db.RUN_STATUS_RUNNING)
+        self.assertEqual(status, Db.RUN_STATUS_RUNNING)
 
 
 
@@ -102,7 +102,7 @@ class TestDb(unittest.TestCase):
     def setUp(self):
         self.dbfile = "test.db"
         # Instantiating the Db class should create the database and a tasks table.
-        self.db = sqlite_utils.Db(self.dbfile)
+        self.db = Db(self.dbfile)
 
 
     def tearDown(self):
@@ -118,10 +118,10 @@ class TestDb(unittest.TestCase):
     def test_db_table_exists(self):
         """
         Tests that the database contains the table specified by the class variable
-        `sqlite_utils.Db.TASKS_TABLE_NAME`.
+        `Db.TASKS_TABLE_NAME`.
         """
         tables = self.db.get_tables()
-        self.assertTrue(sqlite_utils.Db.TASKS_TABLE_NAME in tables)
+        self.assertTrue(Db.TASKS_TABLE_NAME in tables)
 
     def test_insert_run_attr_name(self):
         """
@@ -132,10 +132,10 @@ class TestDb(unittest.TestCase):
         self.db.insert_run(name=run_name)
         rec = self.db.get_run(run_name)
         expected = {
-            sqlite_utils.Db.TASKS_NAME: run_name,
-            sqlite_utils.Db.TASKS_PID: 0,
-            sqlite_utils.Db.TASKS_TARFILE: '',
-            sqlite_utils.Db.TASKS_GCP_TARFILE: ''
+            Db.TASKS_NAME: run_name,
+            Db.TASKS_PID: 0,
+            Db.TASKS_TARFILE: '',
+            Db.TASKS_GCP_TARFILE: ''
         }
         self.assertTrue(rec == expected)
 
@@ -149,10 +149,10 @@ class TestDb(unittest.TestCase):
         self.db.insert_run(name=run_name, pid=pid)
         rec = self.db.get_run(run_name)
         expected = {
-            sqlite_utils.Db.TASKS_NAME: run_name,
-            sqlite_utils.Db.TASKS_PID: pid,
-            sqlite_utils.Db.TASKS_TARFILE: '',
-            sqlite_utils.Db.TASKS_GCP_TARFILE: ''
+            Db.TASKS_NAME: run_name,
+            Db.TASKS_PID: pid,
+            Db.TASKS_TARFILE: '',
+            Db.TASKS_GCP_TARFILE: ''
         }
         self.assertTrue(rec == expected)
 
@@ -165,13 +165,13 @@ class TestDb(unittest.TestCase):
         pid = 77103
         self.db.insert_run(name=run_name, pid=pid)
         tarfile = run_name + ".tar.gz"
-        self.db.update_run(name=run_name, payload={sqlite_utils.Db.TASKS_TARFILE: tarfile})
+        self.db.update_run(name=run_name, payload={Db.TASKS_TARFILE: tarfile})
         rec = self.db.get_run(run_name)
         expected = {
-            sqlite_utils.Db.TASKS_NAME: run_name,
-            sqlite_utils.Db.TASKS_PID: pid,
-            sqlite_utils.Db.TASKS_TARFILE: tarfile,
-            sqlite_utils.Db.TASKS_GCP_TARFILE: ''
+            Db.TASKS_NAME: run_name,
+            Db.TASKS_PID: pid,
+            Db.TASKS_TARFILE: tarfile,
+            Db.TASKS_GCP_TARFILE: ''
         }
         self.assertTrue(rec == expected)
 
@@ -185,14 +185,14 @@ class TestDb(unittest.TestCase):
         tarfile = run_name + ".tar.gz"
         self.db.insert_run(name=run_name, pid=pid, tarfile=tarfile)
         gcp_tarfile = "run_name/run_name.tar.gz"
-        self.db.update_run(name=run_name, payload={sqlite_utils.Db.TASKS_GCP_TARFILE: gcp_tarfile})
+        self.db.update_run(name=run_name, payload={Db.TASKS_GCP_TARFILE: gcp_tarfile})
         rec = self.db.get_run(run_name)
         print(rec)
         expected = {
-            sqlite_utils.Db.TASKS_NAME: run_name,
-            sqlite_utils.Db.TASKS_PID: pid,
-            sqlite_utils.Db.TASKS_TARFILE: tarfile,
-            sqlite_utils.Db.TASKS_GCP_TARFILE: gcp_tarfile
+            Db.TASKS_NAME: run_name,
+            Db.TASKS_PID: pid,
+            Db.TASKS_TARFILE: tarfile,
+            Db.TASKS_GCP_TARFILE: gcp_tarfile
         }
         self.assertTrue(rec == expected)
 
