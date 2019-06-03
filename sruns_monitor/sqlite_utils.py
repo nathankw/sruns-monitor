@@ -63,7 +63,6 @@ class Db:
         # http://www.sqlitetutorial.net/sqlite-python/creating-database/
         self.log(msg="Connecting to sqlite database {}".format(dbname), verbose=True)
         self.conn = sqlite3.connect(dbname)
-        self.curs = self.conn.cursor()
         create_table_sql = """
             CREATE TABLE IF NOT EXISTS {table} (
                 {name} text PRIMARY KEY,
@@ -75,8 +74,8 @@ class Db:
                        pid=self.TASKS_PID,
                        tarfile=self.TASKS_TARFILE,
                        gcp_tarfile=self.TASKS_GCP_TARFILE)
-        with self.conn:
-            self.curs.execute(create_table_sql)
+        with self.conn as conn:
+            conn.execute(create_table_sql)
 
     def log(self, msg, verbose=False):
         if verbose and not self.verbose:
@@ -144,8 +143,8 @@ class Db:
                   tarfile=tarfile,
                   gcp_tarfile=gcp_tarfile)
         self.log(msg=sql, verbose=True)
-        with self.conn: 
-            self.curs.execute(sql) # Returns the sqlite3.Cursor object. 
+        with self.conn as conn:
+            conn.execute(sql) # Returns the sqlite3.Cursor object. 
 
     def update_run(self, name, payload):
         update_str = ""
@@ -158,8 +157,8 @@ class Db:
             updates=update_str,
             name=name)
         self.log(msg=sql, verbose=True)
-        with self.conn: 
-            self.curs.execute(sql)
+        with self.conn as conn:
+            conn.execute(sql)
               
     def get_run(self, name):
         """
@@ -193,8 +192,8 @@ class Db:
             input_name=name)
         self.log(msg=sql, verbose=True)
 
-        with self.conn: 
-            self.curs.execute(sql)
+        with self.conn as conn:
+            conn.execute(sql)
 
     def get_tables(self):
         sql = "SELECT name FROM sqlite_master where type='table';"

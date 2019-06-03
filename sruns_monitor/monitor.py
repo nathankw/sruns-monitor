@@ -133,7 +133,6 @@ class Monitor:
         child_processes = psutil.Process().children()
         # Kill child processes by sending a SIGKILL.
         [c.kill() for c in child_processes] # equiv. to os.kill(pid, signal.SIGKILL) on UNIX.
-        self.db.curs.close()
         self.db.conn.close()
         sys.exit(128 + signum)
 
