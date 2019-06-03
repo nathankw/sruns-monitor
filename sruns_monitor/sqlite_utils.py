@@ -11,6 +11,18 @@ import sruns_monitor.utils as utils
 import pdb
 
 class Db:
+    """
+    An instance of this class has a connection (`sqlite3.Connection` instance) stored in an attribute
+    `self.conn` and several methods that work on the custom database that supports the sequencing
+    runs monitor. Note: according to https://sqlite.org/faq.html#q6, it says:
+
+        Under Unix, you should not carry an open SQLite database across a fork() system call into
+        the child process.
+
+    There, applications that support multiprocessing, such as `sruns_monitor.monitor.Monitor` should
+    make sure that each child process that needs this class makes its own instantiation rather than
+    sharing one created in the main thread, for example. 
+    """
     #: The name of the table that stores workflow state for each sequencing run. 
     TASKS_TABLE_NAME = "tasks"
     #: 'tasks' table attribute name that stores the name of the sequencing run. 
@@ -59,10 +71,11 @@ class Db:
         if not dbname.endswith(".db"):
             dbname += ".db"
         self.dbname = dbname
-        # Database is created if it doesn't exist yet. See entry level details here:
-        # http://www.sqlitetutorial.net/sqlite-python/creating-database/
         self.log(msg="Connecting to sqlite database {}".format(dbname), verbose=True)
-        self.conn = sqlite3.connect(dbname)
+        #: A `sqlite3.Connection` instance.  The specified database file is created if it doesn't 
+        #: yet exist. See entry level details here:
+        #: http://www.sqlitetutorial.net/sqlite-python/creating-database/
+        self.conn = sqlite3.connect(database=dbname, timeout=5) # sec timeout is also the default
         create_table_sql = """
             CREATE TABLE IF NOT EXISTS {table} (
                 {name} text PRIMARY KEY,

@@ -79,16 +79,26 @@ class Monitor:
         #signal.signal(signal.SIGTERM, self._cleanup)
         signal.signal(signal.SIGINT, self._cleanup)
         signal.signal(signal.SIGTERM, self._cleanup)
-        #: The local sqlite database in which to store workflow status for a given run. If not provided,
-        #: defaults to 'sruns.db'. See `sruns_monitor.sqlite_utils.Db` for more details on the
-        #: structure of records in this database.
-        self.db = Db(dbname=self.conf.get(srm.C_SQLITE_DB, "sruns.db"), verbose=self.verbose)
+        #: The name of the local SQLite database.  Name defaults to sruns.db if not provided in 
+        #: the configuration.
+        self.sqlite_dbname = self.conf.get(srm.C_SQLITE_DB, "sruns.db")
+        #: A `sqlite3.Connection` instance to be used by the main thread.
+        self.sqlite_conn_mainthread = self.get_sqlite_conn()
 
         self.logger = logging.getLogger(__name__)
         # Add debug file handler to self.logger:
         srm.add_file_handler(logger=self.logger, level=logging.DEBUG, tag="debug")
         # Add error file handler to self.logger:
         srm.add_file_handler(logger=self.logger, level=logging.ERROR, tag="error")
+
+    def get_sqlite_conn(self):
+        """
+        Creates a connection to the local SQLite database.
+
+        Returns:
+            `sqlite3.Connection` instance that connects to `self.dbname`.
+        """
+        return Db(dbname=self.sqlite_dbname, verbose=self.verbose)
 
     def _validate_conf(self, conf_file):
         """
@@ -133,7 +143,7 @@ class Monitor:
         child_processes = psutil.Process().children()
         # Kill child processes by sending a SIGKILL.
         [c.kill() for c in child_processes] # equiv. to os.kill(pid, signal.SIGKILL) on UNIX.
-        self.db.conn.close()
+        self.sqlite_conn_mainthread.conn.close()
         sys.exit(128 + signum)
 
     def get_rundir_path(self, run_name):
@@ -151,11 +161,13 @@ class Monitor:
             state: `multiprocessing.Queue` instance.
             run_name: `str`. The name of a sequencing run.
         """
-        rec = self.db.get_run(run_name)
-        if not rec[self.db.TASKS_TARFILE]:
-            self.task_tar(state=state, run_name=run_name, lock=lock)
-        if not rec[self.db.TASKS_GCP_TARFILE]:
-            self.task_upload(state=state, run_name=run_name, lock=lock)
+        sl = self.get_sqlite_conn()
+        rec = sl.get_run(run_name)
+        if not rec[Db.TASKS_TARFILE]:
+            self.task_tar(state=state, run_name=run_name, lock=lock, sqlite_conn=sl)
+        if not rec[Db.TASKS_GCP_TARFILE]:
+            self.task_upload(state=state, run_name=run_name, lock=lock, sqlite_conn=sl)
+        sl.close()
 
     def firestore_update_status(self, run_name, status):
         """
@@ -169,7 +181,7 @@ class Monitor:
         }
         firestore_coll.document(run_name).set(firestore_payload)
 
-    def task_tar(self, state,  run_name, lock ):
+    def task_tar(self, state,  run_name, lock, sqlite_conn):
         """
         Creates a gzip tarfile of the run directory and updates the Firestore record's status to
         indicate that this task is running. The tarfile will be created in the directory
@@ -184,26 +196,28 @@ class Monitor:
         Args:
             state: `multiprocessing.Queue` instance.
             run_name: `str`. The name of a sequencing run.
+            lock: `multiprocessing.synchronize.Lock` instance to syncronize access to log streams.
+            sqlite_conn: `sqlite3.Connection` instance for the local SQLite database. 
         """
         try:
-            self.db.update_run(name=run_name, payload={self.db.TASKS_PID: os.getpid()})
+            sqlite_conn.update_run(name=run_name, payload={Db.TASKS_PID: os.getpid()})
             rundir_path = self.get_rundir_path(run_name)
             tarball_name = rundir_path + ".tar.gz"
             with lock:
                 self.logger.debug("Tarring sequencing run {}.".format(run_name))
             # Update status of Firestore record
-            self.firestore_update_status(run_name=run_name, status=self.db.RUN_STATUS_TARRING)
+            self.firestore_update_status(run_name=run_name, status=Db.RUN_STATUS_TARRING)
             tarball = utils.tar(rundir_path, tarball_name)
-            self.db.update_run(name=run_name, payload={self.db.TASKS_TARFILE: tarball_name})
+            sqlite_conn.update_run(name=run_name, payload={Db.TASKS_TARFILE: tarball_name})
             # Update status of Firestore record
-            self.firestore_update_status(run_name=run_name, status=self.db.RUN_STATUS_TARRING_COMPLETE)
+            self.firestore_update_status(run_name=run_name, status=Db.RUN_STATUS_TARRING_COMPLETE)
         except Exception as e:
             state.put((os.getpid(), e))
             # Let child process terminate as it would have so this error is spit out into
             # any potential downstream loggers as well. This does not effect the main thread.
             raise
 
-    def task_upload(self, state, run_name, lock):
+    def task_upload(self, state, run_name, lock, sqlite_conn):
         """
         Uploads the tarred run dirctory to GCP Storage in the directory specified by `self.bucket_basedir`.
         The Firestore record's status is also updated to indicate that this task is running.
@@ -221,15 +235,17 @@ class Monitor:
         Args:
             state: `multiprocessing.Queue` instance.
             run_name: `str`. The name of a sequencing run.
+            lock: `multiprocessing.synchronize.Lock` instance to syncronize access to log streams.
+            sqlite_conn: `sqlite3.Connection` instance for the local SQLite database. 
 
         Raises:
             `MissingTarfile`: There isn't a tarfile for this run (based on the record information
-            in self.db.
+            in the SQLite database.
         """
         try:
-            self.db.update_run(name=run_name, payload={self.db.TASKS_PID: os.getpid()})
-            rec = self.db.get_run(run_name)
-            tarfile = rec[self.db.TASKS_TARFILE]
+            sqlite_conn.update_run(name=run_name, payload={Db.TASKS_PID: os.getpid()})
+            rec = sqlite_conn.get_run(run_name)
+            tarfile = rec[Db.TASKS_TARFILE]
             if not tarfile:
                 raise MissingTarfile("Run {} does not have a tarfile.".format(run_name))
             # Upload tarfile to GCP bucket
@@ -240,15 +256,15 @@ class Monitor:
             with lock:
                 self.logger.debug("Uploading {} to GCP Storage bucket {} as {}.".format(tarfile,bucket, blob_name))
             # Update status of Firestore record
-            self.firestore_update_status(run_name=run_name, status=self.db.RUN_STATUS_UPLOADING)
+            self.firestore_update_status(run_name=run_name, status=Db.RUN_STATUS_UPLOADING)
             utils.upload_to_gcp(bucket=bucket, blob_name=blob_name, source_file=tarfile)
-            self.db.update_run(
+            sqlite_conn.update_run(
                 name=run_name,
-                payload={self.db.TASKS_GCP_TARFILE: "/".join([self.bucket_name, blob_name])})
+                payload={Db.TASKS_GCP_TARFILE: "/".join([self.bucket_name, blob_name])})
             # Remove local tarfile
             os.remove(tarfile)
             # Update status of Firestore record
-            self.firestore_update_status(run_name=run_name, status=self.db.RUN_STATUS_UPLOADING_COMPLETE)
+            self.firestore_update_status(run_name=run_name, status=Db.RUN_STATUS_UPLOADING_COMPLETE)
         except Exception as e:
             state.put((os.getpid(), e))
             # Let child process terminate as it would have so this error is spit out into
@@ -293,10 +309,10 @@ class Monitor:
         """
         Create a new record into the local sqlite db as well as the Firestore db.
         """
-        self.db.insert_run(name=run_name)
+        self.sqlite_conn_mainthread.insert_run(name=run_name)
         # Create Firestore document
         firestore_payload = {
-            srm.FIRESTORE_ATTR_WF_STATUS: self.db.RUN_STATUS_STARTING
+            srm.FIRESTORE_ATTR_WF_STATUS: Db.RUN_STATUS_STARTING
         }
         self.firestore.document(run_name).set(firestore_payload)
         self.run_workflow(run_name)
@@ -320,13 +336,13 @@ class Monitor:
             archive: `boolean`. True meas to move the run directory to the completed runs location.
 
         """
-        rec = self.db.get_run(run_name)
+        rec = self.sqlite_conn_mainthread.get_run(run_name)
         if archive:
             self.archive_run(run_name)
         # Update Firestore record
         firestore_payload = {
-            srm.FIRESTORE_ATTR_WF_STATUS: self.db.RUN_STATUS_COMPLETE,
-            srm.FIRESTORE_ATTR_STORAGE: rec[self.db.TASKS_GCP_TARFILE]
+            srm.FIRESTORE_ATTR_WF_STATUS: Db.RUN_STATUS_COMPLETE,
+            srm.FIRESTORE_ATTR_STORAGE: rec[Db.TASKS_GCP_TARFILE]
         }
         self.firestore.document(run_name).update(firestore_payload)
 
@@ -355,19 +371,19 @@ class Monitor:
         """
         for run_name in run_names:
             self.logger.debug("Processing rundir {}".format(run_name))
-            run_status = self.db.get_run_status(run_name)
-            if run_status == self.db.RUN_STATUS_NEW:
+            run_status = self.sqlite_conn_mainthread.get_run_status(run_name)
+            if run_status == Db.RUN_STATUS_NEW:
                 self.process_new_run(run_name)
-            elif run_status == self.db.RUN_STATUS_COMPLETE:
+            elif run_status == Db.RUN_STATUS_COMPLETE:
                 self.process_completed_run(run_name)
-            elif run_status == self.db.RUN_STATUS_RUNNING:
+            elif run_status == Db.RUN_STATUS_RUNNING:
                 # Check if it has been running for too long.
-                rec = self.db.get_run(run_name)
-                pid = rec[self.db.TASK_PID]
+                rec = self.sqlite_conn_mainthread.get_run(run_name)
+                pid = rec[Db.TASK_PID]
                 if self.kill_childprocess_if_running_to_long(pid):
                     # Send email notification 
                     pass
-            elif run_status == self.db.RUN_STATUS_NOT_RUNNING:
+            elif run_status == Db.RUN_STATUS_NOT_RUNNING:
                 self.run_workflow(run_name)
 
     def start(self):
