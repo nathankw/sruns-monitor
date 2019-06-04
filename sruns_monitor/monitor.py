@@ -70,6 +70,9 @@ class Monitor:
             self.completed_runs_dir = os.path.join(os.path.dirname(self.watchdir), "SRM_COMPLETED")
         if not os.path.exists(self.completed_runs_dir):
             os.mkdir(self.completed_runs_dir)
+        #: When a run in the completed runs directory is older than this many seconds, remove it.
+        #: If not specified in configuration file, defaults to 604800 (1 week). 
+        self.sweep_age_sec = self.conf.get(srm.C_SWEEP_AGE_SEC, 604800)
         #: The number of seconds to wait between run directory scans, with a default of 60.
         self.cycle_pause_sec = self.conf.get(srm.C_CYCLE_PAUSE_SEC, 60)
         #: The number of seconds that a child process running the workflow is allowed to run, after
@@ -407,6 +410,13 @@ class Monitor:
             elif run_status == Db.RUN_STATUS_NOT_RUNNING:
                 self.run_workflow(run_name)
 
+    def clean_completed_runs(self):
+        for run in os.listdir(self.completed_runs_dir):
+            run_path = os.path.join(self.completed_runs_dir, run)
+            if utils.delete_directory_if_too_old(dirpath=run_path, age_seconds=self.sweep_age_sec):
+                self.logger.info("Deleted completed run directory {}".format(run_path))
+            
+
     def start(self):
         cycle_num = 0
         try:
@@ -436,6 +446,7 @@ class Monitor:
                     msg = child_process_msg[1]
                     self.logger.error("Process {} exited with message '{}'.".format(pid, msg))
                     # Email notification
+                self.clean_completed_runs()
                 time.sleep(self.cycle_pause_sec)
         except Exception as e:
             # Email notification

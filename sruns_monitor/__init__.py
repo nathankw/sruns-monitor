@@ -10,6 +10,7 @@ CONF_SCHEMA = os.path.join(os.path.dirname(__file__), "schema.json")
 #: a config parameter. 
 C_WATCHDIR = "watchdir"
 C_COMPLETED_RUNS_DIR = "completed_runs_dir"
+C_SWEEP_AGE_SEC = "sweep_age_sec"
 C_SQLITE_DB = "sqlite_db"
 C_FIRESTORE_COLLECTION = "firestore_collection"
 C_GCP_BUCKET_NAME = "gcp_bucket_name"

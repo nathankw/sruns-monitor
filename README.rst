@@ -48,21 +48,21 @@ The configuration file
 This is a small JSON file that lets the monitor know things such as which GCP bucket and Firestore
 collection to use, for example. The possible keys are:
 
-  * `watchdir`: (Required) The directory to monitor for new sequencing runs.
   * `completed_runs_dir`:  The directory to move a run directory to after it has completed the
     workflow. Defaults to a folder by the name 'SRM_COMPLETED` that resides within the same
     directory as the one being watched. Note that at present, there isn't a means to clean out the
     completed runs directory, but that will come in a future release.
-  * `sqlite_db`: The name of the local SQLite database to use for tracking workflow state.
-    Defaults to *sruns.db* if not specified.
+  * `cycle_pause_sec`: The number of seconds to wait in-between scans of `watchdir`. Defaults to 60.
   * `firestore_collection`: The name of the Google Firestore collection to use for
     persistent workflow state that downstream tools can query. If it doesn't exist yet, it will be
     created. If this parameter is not provided, support for Firestore is turned off. 
-  * `gcp_bucket_name`: (Required) The name of the Google Cloud Storage bucket to which tarred run
-    directories will be uploaded.
   * `gcp_bucket_basedir`: The directory in `gcp_bucket_name` in which to store all uploaded files.
     Defaults to the root directory.
-  * `cycle_pause_sec`: The number of seconds to wait in-between scans of `watchdir`. Defaults to 60.
+  * `gcp_bucket_name`: (Required) The name of the Google Cloud Storage bucket to which tarred run
+    directories will be uploaded.
+  * `sqlite_db`: The name of the local SQLite database to use for tracking workflow state.
+    Defaults to *sruns.db* if not specified.
+  * `sweep_age_sec`: When a run in the completed runs directory is older than this many seconds, 
   * `task_runtime_limit_sec`: The number of seconds a child process is allowed to run before
     being killed. This is meant to serve as a safety mechanism to prevent errant child processes
     from consuming resources in the event that this does happen due to unforeseen circumstances.
@@ -70,6 +70,8 @@ collection to use, for example. The possible keys are:
     and the sequencing run it was associated with. The number of seconds you set for this depends
     on several factors, such as run size and network speed. It is suggested to use two days (172800
     seconds) at least to be conservative.
+  * `watchdir`: (Required) The directory to monitor for new sequencing runs.
+    remove it. Defaults to 604800 (1 week).
 
 Workflow state
 ==============

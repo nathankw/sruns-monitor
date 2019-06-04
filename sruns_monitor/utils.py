@@ -2,6 +2,7 @@
 
 import os
 import psutil
+import shutil
 import tarfile
 import time
 
@@ -83,3 +84,22 @@ def running_too_long(process, limit_seconds=None):
     if process_age > limit_seconds:
         return True
     return False
+
+def get_file_age(filepath):
+    """
+    Returns the age of the file in seconds.
+    """ 
+    now = time.time() # seconds since epoch
+    file_mtime = os.path.getmtime(filepath)
+    return now - file_mtime 
+
+def delete_directory_if_too_old(dirpath, age_seconds):
+    """
+    Removes the directory if it hasn't been modified  since the specified number of seconds. 
+
+    Returns:
+        `boolean`: True means that the directory was removed. 
+    """
+    if get_file_age(dirpath) >= age_seconds:
+        shutil.rmtree(dirpath)
+        return True

@@ -10,6 +10,7 @@
         "gcp_bucket_name": { "type": "string" },
         "gcp_bucket_basedir": { "type": "string" },
         "sqlite_db": { "type": "string" }
+        "sweep_age_sec": { "type": "string" }
     },
     "additionalProperties": false,
     "required": ["watchdir", "gcp_bucket_name"]
