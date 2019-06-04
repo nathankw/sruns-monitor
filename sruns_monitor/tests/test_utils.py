@@ -16,6 +16,7 @@ import json
 import multiprocessing
 import os
 import psutil
+import shutil
 import tarfile
 import time
 import unittest
@@ -31,6 +32,11 @@ class TestUtils(unittest.TestCase):
 
     def setUp(self):
         self.test_rundir = os.path.join(WATCH_DIR, "CompletedRun1")
+        self.test_delete_dirname = os.path.join(TMP_DIR, "DeleteTestDir")
+
+    def tearDown(self):
+        if os.path.exists(self.test_delete_dirname):
+            shutil.rmtree(self.test_delete_dirname)
 
     def test_tar(self):
         """
@@ -79,7 +85,44 @@ class TestUtils(unittest.TestCase):
         time.sleep(1)
         self.assertFalse(utils.running_too_long(process=psutil.Process(p.pid), limit_seconds=5))
 
+    def test_delete_directory_if_too_old_1(self):
+        """
+        Creates a directory, waits 2 seconds, and tests that `utils.delete_directory_if_too_old`
+        returns True when giving an age limit that has already been met. 
+        """
+        sleep_time = 2
+        os.mkdir(self.test_delete_dirname)
+        time.sleep(2)
+        res = utils.delete_directory_if_too_old(dirpath=self.test_delete_dirname, age_seconds= sleep_time-1)
+        self.assertEqual(res, True)
 
+    def test_delete_directory_if_too_old_2(self):
+        """
+        Creates a directory and tests that `utils.delete_directory_if_too_old` returns False when 
+        giving an age limit that hasn't been reached yet. 
+        """
+        os.mkdir(self.test_delete_dirname)
+        res = utils.delete_directory_if_too_old(dirpath=self.test_delete_dirname, age_seconds=2)
+        self.assertEqual(res, False)
+
+    def test_delete_directory_if_too_old_3(self):
+        """
+        Creates a directory and tests that `utils.delete_directory_if_too_old` actually deletes
+        the directory when we expect it to. 
+        """
+        os.mkdir(self.test_delete_dirname)
+        time.sleep(1)
+        res = utils.delete_directory_if_too_old(dirpath=self.test_delete_dirname, age_seconds=1)
+        self.assertEqual(os.path.exists(self.test_delete_dirname), False)
+
+    def test_delete_directory_if_too_old_4(self):
+        """
+        Creates a directory and tests that `utils.delete_directory_if_too_old` doesn't delete
+        the directory when we don't expect it to. 
+        """
+        os.mkdir(self.test_delete_dirname)
+        res = utils.delete_directory_if_too_old(dirpath=self.test_delete_dirname, age_seconds=2)
+        self.assertEqual(os.path.exists(self.test_delete_dirname), True)
 
 if __name__ == "__main__":
     unittest.main()

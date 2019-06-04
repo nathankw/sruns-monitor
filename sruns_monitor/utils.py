@@ -103,3 +103,4 @@ def delete_directory_if_too_old(dirpath, age_seconds):
     if get_file_age(dirpath) >= age_seconds:
         shutil.rmtree(dirpath)
         return True
+    return False
