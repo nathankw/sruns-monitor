@@ -43,13 +43,25 @@ class Monitor:
     SENTINAL_FILES = set(["CopyComplete.txt"])
 
     def __init__(self, conf_file, verbose=False):
+        self.logger = logging.getLogger(__name__)
+        # Add debug file handler to self.logger:
+        srm.add_file_handler(logger=self.logger, level=logging.DEBUG, tag="debug")
+        # Add error file handler to self.logger:
+        srm.add_file_handler(logger=self.logger, level=logging.ERROR, tag="error")
         #: If True, then verbose logging is enabled.
         self.verbose = verbose
         self.conf = self._validate_conf(conf_file)
-        #: The name of the Firestore collection to use. 
-        self.firestore_collection = self.conf["firestore_collection"]
-        #: The Firestore connection to be used by the main thread only. 
-        self.firestore = firestore.Client().collection(self.firestore_collection)
+        #: The name of the Firestore collection to use. If not provided in configuration, will be
+        #: None.
+        self.firestore_collection = self.conf.get("firestore_collection")
+        #: The Firestore connection to be used by the main thread only, or None if 
+        #: `self.firestore_collection` is None.
+        self.firestore = None
+        if self.firestore_collection:
+            self.firestore = firestore.Client().collection(self.firestore_collection)
+        if not self.firestore:
+            self.logger.warn("Firestore not enabled.")
+            
         self.watchdir = self.conf[srm.C_WATCHDIR]
         if not os.path.exists(self.watchdir):
             raise ConfigException("'watchdir' is a required property and the referenced directory must exist.".format(self.watchdir))
@@ -85,12 +97,6 @@ class Monitor:
         #: A `sqlite3.Connection` instance to be used by the main thread.
         self.sqlite_conn_mainthread = self.get_sqlite_conn()
 
-        self.logger = logging.getLogger(__name__)
-        # Add debug file handler to self.logger:
-        srm.add_file_handler(logger=self.logger, level=logging.DEBUG, tag="debug")
-        # Add error file handler to self.logger:
-        srm.add_file_handler(logger=self.logger, level=logging.ERROR, tag="error")
-
     def get_sqlite_conn(self):
         """
         Creates a connection to the local SQLite database.
@@ -98,16 +104,23 @@ class Monitor:
         Returns:
             `sqlite3.Connection` instance that connects to `self.dbname`.
         """
-        return Db(dbname=self.sqlite_dbname, verbose=self.verbose)
+        return Db(dbname=self.sqlite_dbname, verbose=self.verbose, lock=self.lock)
 
     def _validate_conf(self, conf_file):
         """
+        Ensures that the configuration file is valid according to the internal schema. Before
+        validating, any keys that start with '#' will be removed from the JSON object. 
+
         Args:
             conf_file: `str`. The JSON configuration file.
         """
         conf_fh = open(conf_file)
         jconf = json.load(conf_fh)
         conf_fh.close()
+        # Remove any keys that have been commented out
+        for key in list(jconf.keys()):
+            if key.startswith("#"):
+                jconf.pop(key)
         schema_fh = open(srm.CONF_SCHEMA)
         jschema = json.load(schema_fh)
         schema_fh.close()
@@ -171,10 +184,13 @@ class Monitor:
 
     def firestore_update_status(self, run_name, status):
         """
-        Update the status of a Firestore record. This method creates its own connection to the 
+        This method only has an effect if Firestore is configured for use.
+        Updates the status of a Firestore record; creates its own connection to the 
         Firestore database since child processes can call this method; hence, it does not use
         `self.firestore_connection`.
         """
+        if not self.firestore_collection:
+            return
         firestore_coll = firestore.Client().collection(self.firestore_collection)
         firestore_payload = {
             srm.FIRESTORE_ATTR_WF_STATUS: status
@@ -292,7 +308,9 @@ class Monitor:
         process = utils.get_process(pid)
         if process:
             if utils.running_too_long(process, self.process_runtime_limit_sec):
+                self.logger.info("Killing process {} for running too long".format(pid))
                 process.kill()
+                return True
                 # The next iteration of the monitor will see that the pid isn't running and restart
                 # the workflow if it hasn't finished yet. 
 
@@ -311,10 +329,11 @@ class Monitor:
         """
         self.sqlite_conn_mainthread.insert_run(name=run_name)
         # Create Firestore document
-        firestore_payload = {
-            srm.FIRESTORE_ATTR_WF_STATUS: Db.RUN_STATUS_STARTING
-        }
-        self.firestore.document(run_name).set(firestore_payload)
+        if self.firestore:
+            firestore_payload = {
+                srm.FIRESTORE_ATTR_WF_STATUS: Db.RUN_STATUS_STARTING
+            }
+            self.firestore.document(run_name).set(firestore_payload)
         self.run_workflow(run_name)
 
     def process_completed_run(self, run_name, archive=True):
@@ -340,11 +359,12 @@ class Monitor:
         if archive:
             self.archive_run(run_name)
         # Update Firestore record
-        firestore_payload = {
-            srm.FIRESTORE_ATTR_WF_STATUS: Db.RUN_STATUS_COMPLETE,
-            srm.FIRESTORE_ATTR_STORAGE: rec[Db.TASKS_GCP_TARFILE]
-        }
-        self.firestore.document(run_name).update(firestore_payload)
+        if self.firestore:
+            firestore_payload = {
+                srm.FIRESTORE_ATTR_WF_STATUS: Db.RUN_STATUS_COMPLETE,
+                srm.FIRESTORE_ATTR_STORAGE: rec[Db.TASKS_GCP_TARFILE]
+            }
+            self.firestore.document(run_name).update(firestore_payload)
 
     def run_workflow(self, run_name):
         p = Process(target=self._workflow, args=(self.state, self.lock, run_name))
@@ -381,6 +401,7 @@ class Monitor:
                 rec = self.sqlite_conn_mainthread.get_run(run_name)
                 pid = rec[Db.TASK_PID]
                 if self.kill_childprocess_if_running_to_long(pid):
+                    self.logger.info("Child process {} for run {} killed for running too long.".format(pid, run_name))
                     # Send email notification 
                     pass
             elif run_status == Db.RUN_STATUS_NOT_RUNNING:

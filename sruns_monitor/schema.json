@@ -12,6 +12,6 @@
         "sqlite_db": { "type": "string" }
     },
     "additionalProperties": false,
-    "required": ["watchdir", "gcp_bucket_name", "firestore_collection"]
+    "required": ["watchdir", "gcp_bucket_name"]
 }
 

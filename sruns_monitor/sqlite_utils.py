@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 
 import logging
+import multiprocessing
 import sqlite3
 import time
 
@@ -60,12 +61,18 @@ class Db:
 
     logger = logging.getLogger(__name__)
 
-    def __init__(self, dbname, verbose=False):
+    def __init__(self, dbname, lock=False, verbose=False):
         """
         Args:
             dbname: `str`. Name of the local database file. If it doesn't end with a .db exention,
                 one will be added. 
+            lock: `multiprocessing.synchronize.Lock` instance for synchronizing access to log streams. 
+            verbose: `boolean`. True enables verbose logging. 
         """
+        if not lock:
+            lock = multiprocessing.Lock()
+        #: A `multiprocessing.synchronize.Lock` instance for synchronizing access to log streams.
+        self.lock = lock
         #: If True, then verbose logging is enabled.
         self.verbose = verbose
         if not dbname.endswith(".db"):
@@ -93,7 +100,8 @@ class Db:
     def log(self, msg, verbose=False):
         if verbose and not self.verbose:
             return
-        self.logger.debug(msg)
+        with self.lock:
+            self.logger.debug(msg)
 
     def get_run_status(self, name):
         """

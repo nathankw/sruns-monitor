@@ -55,9 +55,9 @@ collection to use, for example. The possible keys are:
     completed runs directory, but that will come in a future release.
   * `sqlite_db`: The name of the local SQLite database to use for tracking workflow state.
     Defaults to *sruns.db* if not specified.
-  * `firestore_collection`: (Required) The name of the Google Firestore collection to use for
+  * `firestore_collection`: The name of the Google Firestore collection to use for
     persistent workflow state that downstream tools can query. If it doesn't exist yet, it will be
-    created.
+    created. If this parameter is not provided, support for Firestore is turned off. 
   * `gcp_bucket_name`: (Required) The name of the Google Cloud Storage bucket to which tarred run
     directories will be uploaded.
   * `gcp_bucket_basedir`: The directory in `gcp_bucket_name` in which to store all uploaded files.
