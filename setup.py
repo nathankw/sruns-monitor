@@ -40,7 +40,9 @@ setup(
           "srun-mon= sruns_monitor.scripts.launch_monitor:main"
       ]
   },
+  keywords = "archive sequencing runs monitor",
   install_requires = [
+    "docutils",
     "google-cloud-firestore",
     "google-cloud-storage",
     "jsonschema",
@@ -50,12 +52,11 @@ setup(
   long_description_content_type = "text/x-rst",
   name = "sruns-monitor",
   packages = find_packages(),
-  package_data = {"sruns_monitor": [
-      os.path.join("tests", "SEQ_RUNS", "*")]
-  },
+  package_data = {"sruns_monitor.tests": ["SEQ_RUNS/*/*"]},
   project_urls = {
       "Read the Docs": "https://sruns-monitor.readthedocs.io/en/latest",
   },
   scripts = scripts,
+  url = "https://pypi.org/project/sruns-monitor/",
   version = "0.3.1"
 )
