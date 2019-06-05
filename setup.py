@@ -37,7 +37,7 @@ setup(
   description = "Looks for new Illumina sequencing runs and tars them up into GCP storage",
   entry_points = {
       "console_scripts": [
-          "srun-mon= sruns_monitor.scripts.launch_monitor:main"
+          "srun-mon=sruns_monitor.scripts.launch_monitor:main"
       ]
   },
   keywords = "archive sequencing runs monitor",
@@ -54,7 +54,7 @@ setup(
   packages = find_packages(),
   package_data = {"sruns_monitor.tests": ["SEQ_RUNS/*/*"]},
   project_urls = {
-      "Read the Docs": "https://sruns-monitor.readthedocs.io/en/latest",
+      "Read the Docs": "https://sruns-monitor.readthedocs.io/en/latest"
   },
   scripts = scripts,
   url = "https://pypi.org/project/sruns-monitor/",

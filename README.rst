@@ -14,9 +14,9 @@ How it works
 ============
 Sequencing Runs Monitor solves the aforementioned challenges through the use of Google Cloud Platform
 services and by tracking workflow state. Sequencing runs are tarred with gzip compression and then
-uploaded to Google Cloud Storage. Workflow state is tracked both locally via SQLite and in the
-NoSQL database Google Firestore for redundancy and to allow downstream clients to query sequencing
-run records.
+uploaded to Google Cloud Storage. Workflow state is tracked locally via SQLite and optionally 
+in the NoSQL database Google Firestore for redundancy and to allow downstream clients to query sequencing
+run records. 
 
 Note: while you don't need to use a Google compute instance to run the monitor script, the documentation
 here assumes that you are since it is the recommended way. That's due to the fact that the monitor
@@ -32,6 +32,21 @@ detects a new sequencing run, it executes the workflow in a child process. The w
 enough to detect which task to begin with, thanks to the local SQLite database. This database has
 a record for each sequencing run and tracks which workflow tasks have been completed, and whether
 the workflow is running.
+
+Mail notifications
+------------------
+If the 'mail' JSON object is set in your configuraiton file, then the designated recipients will
+receive email notifications under the folowing events:
+
+  * A child process running a workflow crashes
+  * A child process is killed for running too long (see conf parameter `task_runtime_limit_sec`)
+  * There is an Exception in the main thread
+  * A new sequencing run is being processed. 
+
+The workflow tasks
+==================
+The workflow is split up into two tasks, each of which can be run on its own (i.e. if the workflow
+needs to be restarted from where it left off). 
 
 Tar task
 -----------
@@ -73,8 +88,8 @@ collection to use, for example. The possible keys are:
   * `watchdir`: (Required) The directory to monitor for new sequencing runs.
     remove it. Defaults to 604800 (1 week).
 
-Workflow state
-==============
+Tracking workflow state
+=======================
 The state of the workflow for a given run directory is tracked both locally in a SQLite database
 as well as Google Firestore - a NoSQL database. Local state is tracked for the purpose of being
 able to restart workflows if a child process ever crashes, or if the node goes down. Firestore is
@@ -96,6 +111,9 @@ The possible fields are:
 
 Firestore
 ---------
+Firestore is optional. If your configuration file includes the `firestore_collection` setting, then
+attempts to write to the designated Firestore collection will be made (creating it if needbe). 
+
 There is a record in the collection for each sequencing run. The possible fields are:
 
   * `name`: The name of the sequencing run. This mirrors the value of the same attribute in the

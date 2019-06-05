@@ -11,15 +11,15 @@
 Tests functions in the ``sruns_monitor.monitor`` module. Because these are functional/integrational
 tests, some user input is required in the form of a JSON configuration file. This should contain
 a subset of the fields in the configuration file expected by the Monitor. Below is an example of
-what is expected:
+what is expected::
 
-{                                                                                                      
-  "firestore_collectionection": "sequencing_runs",                                                           
-  "gcp_bucket_name": "nathankw-testcgs",                                                               
-  "gcp_bucket_basedir": "/",                                                                           
-  "cycle_pause_sec": 60,                                                                               
-  "task_runtime_limit_sec": 86400                                                                      
-}
+  {                                                                                                      
+    "firestore_collectionection": "sequencing_runs",                                                           
+    "gcp_bucket_name": "nathankw-testcgs",                                                               
+    "gcp_bucket_basedir": "/",                                                                           
+    "cycle_pause_sec": 60,                                                                               
+    "task_runtime_limit_sec": 86400                                                                      
+  }
 
 This file must be named conf.json and must exist in the calling directory. 
 """
@@ -40,21 +40,40 @@ from sruns_monitor.sqlite_utils import Db
 #: The name of configuration file in JSON format that is used to instantiate the Monitor class. 
 #: This file must exist in the calling directory.
 CONF_FILE = "conf.json"
+
 SQLITE_DB = os.path.join(os.path.dirname(__file__), "monitortest.db")
-if os.path.exists(SQLITE_DB):
-    os.remove(SQLITE_DB)
+
+#: Flag that when set to True enables Firestore tests to run. This will be set to True automatically
+#: when the user's conf.json file contains the firestore_collection parameter. 
+FIRESTORE = False
+
+def remove_test_db():
+    if os.path.exists(SQLITE_DB):
+        os.remove(SQLITE_DB)
 
 def process_user_conf_file():
+    """
+    Because a user running the functional tests in this file needs to provide their own conf.json
+    file in the calling directory in order to provide minimal configuration such as bucket name and
+    Firestore collection, this function processes that file to add `sruns_monitor.C_WATCHDIR` and
+    `sruns_monitor.C_SQLITE_DB` parameters that always point to test data within the 
+    `sruns_monitor.tests`.  
+
+    Additionally, sets the global variable FIRESTORE to True if the conf.json file contains the
+    `sruns_monitor.C_FIRESTORE_COLLECTION` parameter, which will enable the Firestore tests to run.
+    """
+    global FIRESTORE
     fh = open(CONF_FILE)
     jconf = json.loads(fh.read())
     fh.close()
+    firestore_coll = jconf.get(srm.C_FIRESTORE_COLLECTION)
+    if firestore_coll and not firestore_coll.startswith("#"):
+        FIRESTORE = True
     jconf[srm.C_WATCHDIR] = WATCH_DIR
     jconf[srm.C_SQLITE_DB] = SQLITE_DB
     fout = open(CONF_FILE, "w")
     fout.write(json.dumps(jconf, indent=4))
     fout.close()
-
-process_user_conf_file()
 
 def get_bucket(bucket_name):
     storage_client = storage.Client()
@@ -86,8 +105,7 @@ class TestTaskTar(unittest.TestCase):
         """
         Remove local SQLite database and tarfile after each test runs.
         """
-        if os.path.exists(SQLITE_DB):
-            os.remove(SQLITE_DB)
+        remove_test_db()
         os.remove(self.rec[Db.TASKS_TARFILE])
 
 
@@ -148,8 +166,7 @@ class TestTaskUpload(unittest.TestCase):
         Remove local SQLite database after each test runs, as well as the blob object that is
         created in GCP Storage.
         """
-        if os.path.exists(SQLITE_DB):
-            os.remove(SQLITE_DB)
+        remove_test_db()
         blob = self.monitor.create_blob_name(run_name=self.run_name, filename=self.tarfile)
         self.bucket.delete_blob(blob) # raises google.api_core.exceptions.NotFound if blob doesn't exist.
 
@@ -202,7 +219,6 @@ class TestFirestore(unittest.TestCase):
         the local SQLite database with a value set for the name only. Also, a Firestore record is
         created that initially sets the run name attribute, as well as the workflow status attribute
         to starting.
-
         """
         self.monitor = Monitor(conf_file=CONF_FILE)
         self.run_name = "CompletedRun1" # An actual test run directory
@@ -211,15 +227,15 @@ class TestFirestore(unittest.TestCase):
         firestore_payload = {
             srm.FIRESTORE_ATTR_WF_STATUS: Db.RUN_STATUS_STARTING
         }
-        self.monitor.firestore.document(self.run_name).set(firestore_payload)
+        self.firestore_conn = self.monitor.get_firestore_conn()
+        self.firestore_conn.document(self.run_name).set(firestore_payload)
 
     def tearDown(self):
         """
         Remove local SQLite database after each test runs, as well as the related Firestore record.
         """
-        if os.path.exists(SQLITE_DB):
-            os.remove(SQLITE_DB)
-        self.monitor.firestore.document(self.run_name).delete()
+        remove_test_db()
+        self.firestore_conn.document(self.run_name).delete()
 
     def test_status_tar_complete(self):
         """
@@ -227,7 +243,7 @@ class TestFirestore(unittest.TestCase):
         attribute is set to `Db.RUN_STATUS_TARRING_COMPLETE`.
         """
         self.monitor.task_tar(state=self.monitor.state, run_name=self.run_name, lock=self.monitor.lock, sqlite_conn=self.monitor.get_sqlite_conn())
-        doc_ref = self.monitor.firestore.document(self.run_name).get()
+        doc_ref = self.firestore_conn.document(self.run_name).get()
         doc = doc_ref.to_dict()
         self.assertEqual(doc[srm.FIRESTORE_ATTR_WF_STATUS], Db.RUN_STATUS_TARRING_COMPLETE)
 
@@ -238,7 +254,7 @@ class TestFirestore(unittest.TestCase):
         """
         self.monitor.task_tar(state=self.monitor.state, run_name=self.run_name, lock=self.monitor.lock, sqlite_conn=self.monitor.get_sqlite_conn())
         self.monitor.task_upload(state=self.monitor.state, run_name=self.run_name, lock=self.monitor.lock, sqlite_conn=self.monitor.get_sqlite_conn())
-        doc_ref = self.monitor.firestore.document(self.run_name).get()
+        doc_ref = self.firestore_conn.document(self.run_name).get()
         doc = doc_ref.to_dict()
         self.assertEqual(doc[srm.FIRESTORE_ATTR_WF_STATUS], Db.RUN_STATUS_UPLOADING_COMPLETE)
 
@@ -257,7 +273,7 @@ class TestFirestore(unittest.TestCase):
         attribute's value is what we expect.
         """
         self.monitor.process_completed_run(run_name=self.run_name, archive=False)
-        doc_ref = self.monitor.firestore.document(self.run_name).get()
+        doc_ref = self.firestore_conn.document(self.run_name).get()
         doc = doc_ref.to_dict()
         self.assertEqual(doc[srm.FIRESTORE_ATTR_WF_STATUS], Db.RUN_STATUS_COMPLETE)
 
@@ -277,12 +293,25 @@ class TestFirestore(unittest.TestCase):
         attribute's value is what we expect.
         """
         self.monitor.process_completed_run(run_name=self.run_name, archive=False)
-        fs_doc_ref = self.monitor.firestore.document(self.run_name).get()
+        fs_doc_ref = self.firestore_conn.document(self.run_name).get()
         fs_doc = fs_doc_ref.to_dict()
         local_rec = self.monitor.sqlite_conn_mainthread.get_run(name=self.run_name)
         self.assertEqual(fs_doc[srm.FIRESTORE_ATTR_STORAGE], local_rec[Db.TASKS_GCP_TARFILE])
 
 
+def get_suite():
+    process_user_conf_file()
+    test_classes = [TestTaskTar, TestTaskUpload]
+    if FIRESTORE:
+        test_classes.append(TestFirestore)
+    suite = unittest.TestSuite()
+    loader = unittest.TestLoader()
+    for i in test_classes:
+        suite.addTests(loader.loadTestsFromTestCase(i))
+    return suite
+    
 
 if __name__ == "__main__":
-    unittest.main()
+    suite = get_suite()
+    runner = unittest.TextTestRunner(verbosity=2)
+    runner.run(suite)

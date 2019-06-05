@@ -5,3 +5,4 @@
 **__pycache__
 **tmp
 **.tar.gz
+docs/_build

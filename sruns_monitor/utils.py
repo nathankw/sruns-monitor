@@ -107,7 +107,7 @@ def delete_directory_if_too_old(dirpath, age_seconds):
         return True
     return False
 
-def send_mail(from_addr, to_addrs, subject, body, host="10.248.194.28"):
+def send_mail(from_addr, to_addrs, subject, body, host):
     msg = EmailMessage()
     msg["Subject"] = subject
     msg.set_content(body)

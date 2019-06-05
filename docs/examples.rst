@@ -7,8 +7,8 @@ Starting the monitor
 You can start it using the command-line script sruns-mon or by explicitly instantiating the Monitor
 class.
 
-script
-^^^^^^
+By script
+^^^^^^^^^
 
 ::
 
@@ -23,3 +23,13 @@ explicitly
 
   mon = Monitor(conf="conf.json")
   mon.start()
+
+Running functional tests
+------------------------
+Run these tests to ensure that your configuration file is set up appropriately and that you have the
+proper GCP security credentials configured. 
+::
+
+  monitor_integration_tests.py
+
+

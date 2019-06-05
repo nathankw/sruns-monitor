@@ -336,15 +336,17 @@ class Monitor:
     def process_new_run(self, run_name):
         """
         Create a new record into the local sqlite db as well as the Firestore db.
+        If mail is configured, sends an email notification about the new run first. 
         """
+        self.send_mail(subject="sruns-mon new run {}".format(run_name), msg_body=run_name)
         self.sqlite_conn_mainthread.insert_run(name=run_name)
         # Create Firestore document
-        firestore = self.get_firestore_conn()
-        if firestore:
+        firestore_coll = self.get_firestore_conn()
+        if firestore_coll:
             firestore_payload = {
                 srm.FIRESTORE_ATTR_WF_STATUS: Db.RUN_STATUS_STARTING
             }
-            self.firestore.document(run_name).set(firestore_payload)
+            firestore_coll.document(run_name).set(firestore_payload)
         self.run_workflow(run_name)
 
     def process_completed_run(self, run_name, archive=True):
@@ -370,13 +372,13 @@ class Monitor:
         if archive:
             self.archive_run(run_name)
         # Update Firestore record
-        firestore = self.get_firestore_conn()
-        if firestore:
+        firestore_conn = self.get_firestore_conn()
+        if firestore_conn:
             firestore_payload = {
                 srm.FIRESTORE_ATTR_WF_STATUS: Db.RUN_STATUS_COMPLETE,
                 srm.FIRESTORE_ATTR_STORAGE: rec[Db.TASKS_GCP_TARFILE]
             }
-            self.firestore.document(run_name).update(firestore_payload)
+            firestore_conn.document(run_name).update(firestore_payload)
 
     def run_workflow(self, run_name):
         p = Process(target=self._workflow, args=(self.state, self.lock, run_name))
