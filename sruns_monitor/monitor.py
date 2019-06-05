@@ -423,6 +423,10 @@ class Monitor:
                 self.run_workflow(run_name)
 
     def clean_completed_runs(self):
+        """
+        Removes run directories that haven't been modified since `self.sweep_age_sec`, parameterized
+        in the configuration file as :const:`sruns_monitor.C_SWEEP_AGE_SEC`.
+        """
         for run in os.listdir(self.completed_runs_dir):
             run_path = os.path.join(self.completed_runs_dir, run)
             if utils.delete_directory_if_too_old(dirpath=run_path, age_seconds=self.sweep_age_sec):
@@ -430,6 +434,16 @@ class Monitor:
                     self.logger.info("Deleted completed run directory {}".format(run_path))
 
     def send_mail(self, subject, msg_body):
+        """
+        Sends an email if the mail parameters are provided in the configuration.  
+        Prior to sending an email, the subject and body of the email will be logged. 
+
+        Args:
+            subject: `str`. The email's subject.
+            msg_body: `str`. The email body w/o any markup.
+
+        Returns: `None`. 
+        """
         mail_params = self.get_mail_params()
         if not mail_params:
             return
@@ -442,7 +456,7 @@ class Monitor:
                     Subject: {}
                     Body: {}
             """.format(subject, msg_body))
-        return utils.send_mail(from_addr=from_addr, to_addrs=tos, subject=subject, body=msg_body, host=host)
+        utils.send_mail(from_addr=from_addr, to_addrs=tos, subject=subject, body=msg_body, host=host)
 
 
     def start(self):

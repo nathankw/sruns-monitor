@@ -20,7 +20,9 @@
                     "uniqueItems": true,
                     "items": {"type": "string"}
                 }
-            }   
+            },
+            "additionalProperties": false,
+            "required": ["from", "host", "tos"]
         },
         "watchdir": {
             "description": "Directory in which to look for new sequencing runs",
