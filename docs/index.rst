@@ -25,9 +25,10 @@ Client API Modules
 .. toctree::
    :maxdepth: 3
 
-   monitor
-   sqlite_utils
-   utils
+   sruns_monitor
+   sruns_monitor.monitor <monitor>
+   sruns_monitor.sqlite_utils <sqlite_utils>
+   sruns_monitor.utils <utils>
 
 Unit Tests
 ----------
@@ -35,9 +36,9 @@ Unit Tests
 .. toctree::
    :maxdepth: 3
 
-   tests/monitor_integration_tests
-   tests/test_utils
-   tests/test_sqlite_utils
+   sruns_monitor.tests.monitor_integration_tests <tests/monitor_integration_tests>
+   sruns_monitor.tests.test_utils <tests/test_utils>
+   sruns_monitor.tests.test_sqlite_utils <tests/test_sqlite_utils>
 
 Indices and tables
 ==================

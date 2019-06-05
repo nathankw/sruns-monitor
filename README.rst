@@ -88,6 +88,8 @@ collection to use, for example. The possible keys are:
   * `watchdir`: (Required) The directory to monitor for new sequencing runs.
     remove it. Defaults to 604800 (1 week).
 
+The user-supplied configuration file is validated in the Monitor agains a built-in schema. 
+
 Tracking workflow state
 =======================
 The state of the workflow for a given run directory is tracked both locally in a SQLite database

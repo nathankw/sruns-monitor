@@ -43,13 +43,20 @@ class Monitor:
     SENTINAL_FILES = set(["CopyComplete.txt"])
 
     def __init__(self, conf_file, verbose=False):
+        """
+        Args:
+            conf_file: `str`. Path to JSON configuration file.
+            verbose: `boolean`. True enables verbose logging. 
+        """
         self.logger = logging.getLogger(__name__)
         # Add debug file handler to self.logger:
         srm.add_file_handler(logger=self.logger, level=logging.DEBUG, tag="debug")
         # Add error file handler to self.logger:
         srm.add_file_handler(logger=self.logger, level=logging.ERROR, tag="error")
-        #: If True, then verbose logging is enabled.
+        #: Stores the value passed during instantiation to the parameter by the same name. 
         self.verbose = verbose
+        #: Stores the validated JSON configuration file as a dictionary. Any top-level keys in the
+        #: JSON file that were commented out (start with a '#') are not present here. 
         self.conf = self._validate_conf(conf_file)
         #: The name of the Firestore collection to use. If not provided in configuration, will be
         #: None.
