@@ -9,6 +9,7 @@ CONF_SCHEMA = os.path.join(os.path.dirname(__file__), "schema.json")
 #: Configuration parameter names in conf.json. Each of the variables that starts with a C_ denotes
 #: a config parameter. 
 C_WATCHDIR = "watchdir"
+C_MAIL = "mail"
 C_COMPLETED_RUNS_DIR = "completed_runs_dir"
 C_SWEEP_AGE_SEC = "sweep_age_sec"
 C_SQLITE_DB = "sqlite_db"

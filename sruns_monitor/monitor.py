@@ -54,14 +54,9 @@ class Monitor:
         #: The name of the Firestore collection to use. If not provided in configuration, will be
         #: None.
         self.firestore_collection = self.conf.get("firestore_collection")
-        #: The Firestore connection to be used by the main thread only, or None if 
-        #: `self.firestore_collection` is None.
-        self.firestore = None
-        if self.firestore_collection:
-            self.firestore = firestore.Client().collection(self.firestore_collection)
-        if not self.firestore:
+        if not self.firestore_collection:
             self.logger.warn("Firestore not enabled.")
-            
+
         self.watchdir = self.conf[srm.C_WATCHDIR]
         if not os.path.exists(self.watchdir):
             raise ConfigException("'watchdir' is a required property and the referenced directory must exist.".format(self.watchdir))
@@ -71,7 +66,7 @@ class Monitor:
         if not os.path.exists(self.completed_runs_dir):
             os.mkdir(self.completed_runs_dir)
         #: When a run in the completed runs directory is older than this many seconds, remove it.
-        #: If not specified in configuration file, defaults to 604800 (1 week). 
+        #: If not specified in configuration file, defaults to 604800 (1 week).
         self.sweep_age_sec = self.conf.get(srm.C_SWEEP_AGE_SEC, 604800)
         #: The number of seconds to wait between run directory scans, with a default of 60.
         self.cycle_pause_sec = self.conf.get(srm.C_CYCLE_PAUSE_SEC, 60)
@@ -94,11 +89,17 @@ class Monitor:
         #signal.signal(signal.SIGTERM, self._cleanup)
         signal.signal(signal.SIGINT, self._cleanup)
         signal.signal(signal.SIGTERM, self._cleanup)
-        #: The name of the local SQLite database.  Name defaults to sruns.db if not provided in 
+        #: The name of the local SQLite database.  Name defaults to sruns.db if not provided in
         #: the configuration.
         self.sqlite_dbname = self.conf.get(srm.C_SQLITE_DB, "sruns.db")
         #: A `sqlite3.Connection` instance to be used by the main thread.
         self.sqlite_conn_mainthread = self.get_sqlite_conn()
+
+
+    def get_firestore_conn(self):
+        if self.firestore_collection:
+            return firestore.Client().collection(self.firestore_collection)
+        return False
 
     def get_sqlite_conn(self):
         """
@@ -112,7 +113,7 @@ class Monitor:
     def _validate_conf(self, conf_file):
         """
         Ensures that the configuration file is valid according to the internal schema. Before
-        validating, any keys that start with '#' will be removed from the JSON object. 
+        validating, any keys that start with '#' will be removed from the JSON object.
 
         Args:
             conf_file: `str`. The JSON configuration file.
@@ -130,13 +131,16 @@ class Monitor:
         jsonschema.validate(jconf, jschema)
         return jconf
 
+    def get_mail_params(self):
+        return self.conf.get(srm.C_MAIL)
+
     def _validate_bucket(self):
         """
         Tries to create a `google.cloud.storage.bucket.Bucket` instance to ensure that we can
-        connect to the bucket designated by `self.bucket_name`. If we can here, then a child process 
-        should also be able to when it needs to. While we could store the bucket instance in our own 
-        instance variable, it's probably not safe to share these amongst child processes, so better 
-        to let each child process make it's own bucket instance. 
+        connect to the bucket designated by `self.bucket_name`. If we can here, then a child process
+        should also be able to when it needs to. While we could store the bucket instance in our own
+        instance variable, it's probably not safe to share these amongst child processes, so better
+        to let each child process make it's own bucket instance.
         """
         storage_client = storage.Client()
         # A `google.cloud.storage.bucket.Bucket` instance.
@@ -153,7 +157,8 @@ class Monitor:
                 handler for a specific type of signal in the funtion `signal.signal`.
         """
         signame = signal.Signals(signum).name
-        self.logger.error("Caught signal {}. Preparing for shutdown.".format(signame))
+        with self.lock:
+            self.logger.error("Caught signal {}. Preparing for shutdown.".format(signame))
         # email notification
         pid = os.getpid()
         child_processes = psutil.Process().children()
@@ -188,13 +193,13 @@ class Monitor:
     def firestore_update_status(self, run_name, status):
         """
         This method only has an effect if Firestore is configured for use.
-        Updates the status of a Firestore record; creates its own connection to the 
+        Updates the status of a Firestore record; creates its own connection to the
         Firestore database since child processes can call this method; hence, it does not use
         `self.firestore_connection`.
         """
         if not self.firestore_collection:
             return
-        firestore_coll = firestore.Client().collection(self.firestore_collection)
+        firestore_coll = self.get_firestore_conn()
         firestore_payload = {
             srm.FIRESTORE_ATTR_WF_STATUS: status
         }
@@ -216,7 +221,7 @@ class Monitor:
             state: `multiprocessing.Queue` instance.
             run_name: `str`. The name of a sequencing run.
             lock: `multiprocessing.synchronize.Lock` instance to syncronize access to log streams.
-            sqlite_conn: `sqlite3.Connection` instance for the local SQLite database. 
+            sqlite_conn: `sqlite3.Connection` instance for the local SQLite database.
         """
         try:
             sqlite_conn.update_run(name=run_name, payload={Db.TASKS_PID: os.getpid()})
@@ -231,7 +236,7 @@ class Monitor:
             # Update status of Firestore record
             self.firestore_update_status(run_name=run_name, status=Db.RUN_STATUS_TARRING_COMPLETE)
         except Exception as e:
-            state.put((os.getpid(), e))
+            state.put((run_name, os.getpid(), e))
             # Let child process terminate as it would have so this error is spit out into
             # any potential downstream loggers as well. This does not effect the main thread.
             raise
@@ -255,7 +260,7 @@ class Monitor:
             state: `multiprocessing.Queue` instance.
             run_name: `str`. The name of a sequencing run.
             lock: `multiprocessing.synchronize.Lock` instance to syncronize access to log streams.
-            sqlite_conn: `sqlite3.Connection` instance for the local SQLite database. 
+            sqlite_conn: `sqlite3.Connection` instance for the local SQLite database.
 
         Raises:
             `MissingTarfile`: There isn't a tarfile for this run (based on the record information
@@ -285,7 +290,7 @@ class Monitor:
             # Update status of Firestore record
             self.firestore_update_status(run_name=run_name, status=Db.RUN_STATUS_UPLOADING_COMPLETE)
         except Exception as e:
-            state.put((os.getpid(), e))
+            state.put((run_name, os.getpid(), e))
             # Let child process terminate as it would have so this error is spit out into
             # any potential downstream loggers as well. This does not effect the main thread.
             raise
@@ -303,19 +308,20 @@ class Monitor:
     def kill_childprocess_if_running_to_long(self, pid):
         """
         Args:
-            pid: `int`. The process ID of a child process. 
+            pid: `int`. The process ID of a child process.
 
         Returns:
-            `Boolean`. `True` if the process was killed (kill signal sent) False otherwise. 
+            `Boolean`. `True` if the process was killed (kill signal sent) False otherwise.
         """
         process = utils.get_process(pid)
         if process:
             if utils.running_too_long(process, self.process_runtime_limit_sec):
-                self.logger.info("Killing process {} for running too long".format(pid))
+                with self.lock:
+                    self.logger.info("Killing process {} for running too long".format(pid))
                 process.kill()
                 return True
                 # The next iteration of the monitor will see that the pid isn't running and restart
-                # the workflow if it hasn't finished yet. 
+                # the workflow if it hasn't finished yet.
 
     def archive_run(self, run_name):
         """
@@ -323,7 +329,8 @@ class Monitor:
         """
         from_path = self.get_rundir_path(run_name)
         to_path = os.path.join(self.completed_runs_dir, run_name)
-        self.logger.debug("Moving run {run} to completed runs location {loc}.".format(run=run_name, loc=to_path))
+        with self.lock:
+            self.logger.debug("Moving run {run} to completed runs location {loc}.".format(run=run_name, loc=to_path))
         os.rename(from_path, to_path)
 
     def process_new_run(self, run_name):
@@ -332,7 +339,8 @@ class Monitor:
         """
         self.sqlite_conn_mainthread.insert_run(name=run_name)
         # Create Firestore document
-        if self.firestore:
+        firestore = self.get_firestore_conn()
+        if firestore:
             firestore_payload = {
                 srm.FIRESTORE_ATTR_WF_STATUS: Db.RUN_STATUS_STARTING
             }
@@ -362,7 +370,8 @@ class Monitor:
         if archive:
             self.archive_run(run_name)
         # Update Firestore record
-        if self.firestore:
+        firestore = self.get_firestore_conn()
+        if firestore:
             firestore_payload = {
                 srm.FIRESTORE_ATTR_WF_STATUS: Db.RUN_STATUS_COMPLETE,
                 srm.FIRESTORE_ATTR_STORAGE: rec[Db.TASKS_GCP_TARFILE]
@@ -393,7 +402,8 @@ class Monitor:
         any remaining steps, i.e. restart, cleanup, ...
         """
         for run_name in run_names:
-            self.logger.debug("Processing rundir {}".format(run_name))
+            with self.lock:
+                self.logger.debug("Processing rundir {}".format(run_name))
             run_status = self.sqlite_conn_mainthread.get_run_status(run_name)
             if run_status == Db.RUN_STATUS_NEW:
                 self.process_new_run(run_name)
@@ -404,9 +414,11 @@ class Monitor:
                 rec = self.sqlite_conn_mainthread.get_run(run_name)
                 pid = rec[Db.TASK_PID]
                 if self.kill_childprocess_if_running_to_long(pid):
-                    self.logger.info("Child process {} for run {} killed for running too long.".format(pid, run_name))
-                    # Send email notification 
-                    pass
+                    msg = "Child process {} for run {} killed for running too long.".format(pid, run_name)
+                    with self.lock:
+                        self.logger.info(msg)
+                    # Send email notification
+                    self.send_mail(subject="sruns-mon run {} killed".format(run_name), body=msg)
             elif run_status == Db.RUN_STATUS_NOT_RUNNING:
                 self.run_workflow(run_name)
 
@@ -414,8 +426,24 @@ class Monitor:
         for run in os.listdir(self.completed_runs_dir):
             run_path = os.path.join(self.completed_runs_dir, run)
             if utils.delete_directory_if_too_old(dirpath=run_path, age_seconds=self.sweep_age_sec):
-                self.logger.info("Deleted completed run directory {}".format(run_path))
-            
+                with self.lock:
+                    self.logger.info("Deleted completed run directory {}".format(run_path))
+
+    def send_mail(self, subject, msg_body):
+        mail_params = self.get_mail_params()
+        if not mail_params:
+            return
+        from_addr = mail_params["from"]
+        host = mail_params["host"]
+        tos = mail_params["tos"]
+        with self.lock:
+            self.logger.info("""
+                Sending mail
+                    Subject: {}
+                    Body: {}
+            """.format(subject, msg_body))
+        return utils.send_mail(from_addr=from_addr, to_addrs=tos, subject=subject, body=msg_body, host=host)
+
 
     def start(self):
         cycle_num = 0
@@ -442,16 +470,23 @@ class Monitor:
                 except queue.Empty:
                     pass
                 if child_process_msg:
-                    pid = child_process_msg[0]
-                    msg = child_process_msg[1]
-                    self.logger.error("Process {} exited with message '{}'.".format(pid, msg))
-                    # Email notification
+                    run_name = child_process_msg[0]
+                    pid = child_process_msg[1]
+                    err_msg = child_process_msg[2]
+                    msg = "Run {} with process ID {} exited with message '{}'.".format(run_name, pid, err_msg)
+                    with self.lock:
+                        self.logger.error(msg)
+                        self.logger.info("Sending email notification")
+                    self.send_mail(subject="sruns-mon error for run {}".format(run_name), body=msg)
                 self.clean_completed_runs()
                 time.sleep(self.cycle_pause_sec)
         except Exception as e:
-            # Email notification
-            self.logger.error("Main process Exception: {}".format(e))
+            msg = "Main process Exception: {}".format(e)
+            with self.lock:
+                self.logger.error(msg)
+            self.send_mail(subject="sruns-mon error", body=msg)
             raise
+
 
 ### Example
 # m = Monitor(conf_file="my_conf_file.json")

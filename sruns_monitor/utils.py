@@ -1,7 +1,9 @@
 # -*- coding: utf-8 -*-
 
+from email.message import EmailMessage
 import os
 import psutil
+from smtplib import SMTP, SMTPException
 import shutil
 import tarfile
 import time
@@ -88,19 +90,26 @@ def running_too_long(process, limit_seconds=None):
 def get_file_age(filepath):
     """
     Returns the age of the file in seconds.
-    """ 
+    """
     now = time.time() # seconds since epoch
     file_mtime = os.path.getmtime(filepath)
-    return now - file_mtime 
+    return now - file_mtime
 
 def delete_directory_if_too_old(dirpath, age_seconds):
     """
-    Removes the directory if it hasn't been modified  since the specified number of seconds. 
+    Removes the directory if it hasn't been modified  since the specified number of seconds.
 
     Returns:
-        `boolean`: True means that the directory was removed. 
+        `boolean`: True means that the directory was removed.
     """
     if get_file_age(dirpath) >= age_seconds:
         shutil.rmtree(dirpath)
         return True
     return False
+
+def send_mail(from_addr, to_addrs, subject, body, host="10.248.194.28"):
+    msg = EmailMessage()
+    msg["Subject"] = subject
+    msg.set_content(body)
+    with SMTP(host=host, timeout=5) as smtp:
+        return smtp.send_message(msg=msg, from_addr=from_addr, to_addrs=to_addrs)

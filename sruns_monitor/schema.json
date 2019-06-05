@@ -2,15 +2,62 @@
     "$schema": "http://json-schema.org/draft-04/schema#",
     "type": "object",
     "properties": {
-        "watchdir": { "type": "string" },
-        "completed_runs_dir": { "type": "string" },
-        "cycle_pause_sec": { "type": "integer" },
-        "task_runtime_limit_sec": { "type": "integer" },
-        "firestore_collection": { "type": "string" },
-        "gcp_bucket_name": { "type": "string" },
-        "gcp_bucket_basedir": { "type": "string" },
-        "sqlite_db": { "type": "string" }
-        "sweep_age_sec": { "type": "string" }
+        "mail": {
+            "description": "Configuraiton for how to send emails",
+            "type": "object",
+            "properties": {
+                "from": {
+                    "description": "The from email address",
+                    "type": "string"
+                },
+                "host": {
+                    "description": "The mail server's IP or hostname",
+                    "type": "string"
+                },
+                "tos": {
+                    "description": "List of recipient email addresses.",
+                    "type": "array",
+                    "uniqueItems": true,
+                    "items": {"type": "string"}
+                }
+            }   
+        },
+        "watchdir": {
+            "description": "Directory in which to look for new sequencing runs",
+            "type": "string" 
+        },
+        "completed_runs_dir": {
+            "description": "Directory in which to move sequencing runs that have completed the workflow.",
+            "type": "string"
+        },
+        "cycle_pause_sec": {
+            "description": "The number of seconds that the monitor waits between scans",
+            "type": "integer" 
+        },
+        "task_runtime_limit_sec": {
+            "description": "Maximum number of seconds that a subprocess is allowed to run for before being killed",
+            "type": "integer" 
+        },
+        "firestore_collection": {
+            "description": "The name of a GCP Firestore collection for storing persistent workflow state",
+            "type": "string"
+        },
+        "gcp_bucket_name": {
+            "description": "Name of the Google Cloud Storage bucket in which tarred sequencing runs will be stored",
+            "type": "string"
+        }, 
+        "gcp_bucket_basedir": {
+            "description": "The parent folder in the Google Storage bucket under which all files will be written",
+            "type": "string"
+        },
+        "sqlite_db": {
+            "description": "The name of the local SQLite database for tracking local workflow state",
+            "type": "string"
+        },
+        "sweep_age_sec": {
+            "description": "For runs in the path specified by completed_runs_dir, directories older than this number of seconds will be deleted",
+            "type": "string"
+        }
     },
     "additionalProperties": false,
     "required": ["watchdir", "gcp_bucket_name"]

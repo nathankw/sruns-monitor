@@ -11,20 +11,6 @@ import os
 import sys
 
 
-FORMATTER = logging.Formatter('%(asctime)s:%(name)s:%(levelname)s\t%(message)s')
-#: The log directory. Will be created if it doesn't exist yet.
-LOG_DIR = "Logs_" + __package__.capitalize()
-if not os.path.exists(LOG_DIR):
-    os.mkdir(LOG_DIR)
-
-logger = logging.getLogger(__package__)
-logger.setLevel(logging.DEBUG)
-ch = logging.StreamHandler(stream=sys.stdout)
-ch.setLevel(logging.DEBUG)
-ch.setFormatter(FORMATTER)
-logger.addHandler(ch)
-
-
 def add_file_handler(logger, level, tag):
     """
     Adds a ``logging.FileHandler`` handler to the specified ``logging`` instance that will log
@@ -57,3 +43,16 @@ def get_logfile_name(tag):
     filename = "log_" + tag + ".txt"
     filename = os.path.join(LOG_DIR, filename)
     return filename
+
+FORMATTER = logging.Formatter('%(asctime)s:%(name)s:%(levelname)s\t%(message)s')
+#: The log directory. Will be created if it doesn't exist yet.
+LOG_DIR = "Logs_" + __package__.capitalize()
+if not os.path.exists(LOG_DIR):
+    os.mkdir(LOG_DIR)
+
+logger = logging.getLogger(__package__)
+logger.setLevel(logging.DEBUG)
+ch = logging.StreamHandler(stream=sys.stdout)
+ch.setLevel(logging.DEBUG)
+ch.setFormatter(FORMATTER)
+logger.addHandler(ch)
