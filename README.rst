@@ -43,6 +43,9 @@ receive email notifications under the folowing events:
   * There is an Exception in the main thread
   * A new sequencing run is being processed. 
 
+You can use the script `send_test_email.py` to test that the mail configuration you provide is
+working. If it is, you should receive an email with the subject "sruns-mon test email". 
+
 The workflow tasks
 ==================
 The workflow is split up into two tasks, each of which can be run on its own (i.e. if the workflow
