@@ -165,7 +165,9 @@ class Monitor:
         """
         signame = signal.Signals(signum).name
         with self.lock:
-            self.logger.error("Caught signal {}. Preparing for shutdown.".format(signame))
+            msg = "Caught signal {}. Preparing for shutdown.".format(signame)
+            self.logger.error(msg)
+            self.send_mail(subject="", msg_body=msg)
         # email notification
         pid = os.getpid()
         child_processes = psutil.Process().children()
@@ -195,7 +197,7 @@ class Monitor:
             self.task_tar(state=state, run_name=run_name, lock=lock, sqlite_conn=sl)
         if not rec[Db.TASKS_GCP_TARFILE]:
             self.task_upload(state=state, run_name=run_name, lock=lock, sqlite_conn=sl)
-        sl.close()
+        sl.conn.close()
 
     def firestore_update_status(self, run_name, status):
         """
@@ -437,10 +439,10 @@ class Monitor:
         in the configuration file as :const:`sruns_monitor.C_SWEEP_AGE_SEC`.
         """
         for run in os.listdir(self.completed_runs_dir):
-            run_path = os.path.join(self.completed_runs_dir, run)
-            if utils.delete_directory_if_too_old(dirpath=run_path, age_seconds=self.sweep_age_sec):
+            completed_run_path = os.path.join(self.completed_runs_dir, run)
+            if utils.delete_directory_if_too_old(dirpath=completed_run_path, age_seconds=self.sweep_age_sec):
                 with self.lock:
-                    self.logger.info("Deleted completed run directory {}".format(run_path))
+                    self.logger.info("Deleted completed run directory {}".format(completed_run_path))
 
     def send_mail(self, subject, msg_body):
         """
@@ -448,11 +450,13 @@ class Monitor:
         Prior to sending an email, the subject and body of the email will be logged. 
 
         Args:
-            subject: `str`. The email's subject.
+            subject: `str`. The email's subject. Note that the subject will be mangled a bit - 
+                it will be prefixed with `self.monitor_Name` plus a colon and a space. 
             msg_body: `str`. The email body w/o any markup.
 
         Returns: `None`. 
         """
+        subject = self.monitor_name + ": " + subject
         mail_params = self.get_mail_params()
         if not mail_params:
             return

@@ -24,6 +24,10 @@
             "additionalProperties": false,
             "required": ["from", "host", "tos"]
         },
+        "name": {
+            "description": "The name of the monitor. The name will appear in the subject line if email notification is configured, as well as in other places, i.e. log messages.",
+            "type": "string"
+        },
         "watchdir": {
             "description": "Directory in which to look for new sequencing runs",
             "type": "string" 
@@ -62,6 +66,6 @@
         }
     },
     "additionalProperties": false,
-    "required": ["watchdir", "gcp_bucket_name"]
+    "required": ["name", "watchdir", "gcp_bucket_name"]
 }
 

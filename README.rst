@@ -66,6 +66,8 @@ The configuration file
 This is a small JSON file that lets the monitor know things such as which GCP bucket and Firestore
 collection to use, for example. The possible keys are:
 
+  * `name`: The name of the monitor. The name will appear in the subject line if email notification
+    is configured, as well as in other places, i.e. log messages.
   * `completed_runs_dir`:  The directory to move a run directory to after it has completed the
     workflow. Defaults to a folder by the name 'SRM_COMPLETED` that resides within the same
     directory as the one being watched. Note that at present, there isn't a means to clean out the

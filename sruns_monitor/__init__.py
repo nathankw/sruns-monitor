@@ -6,6 +6,9 @@ from ._logging import *
 
 #: The JSON Schema file that defines the properties of the configuration file.
 CONF_SCHEMA = os.path.join(os.path.dirname(__file__), "schema.json")
+#: The name of the monitor. The name will appear in the subject line if email notification is
+#: configured, as well as in other places, i.e. log messages. 
+C_MONITOR_NAME = "name"
 #: Configuration parameter names in conf.json. Each of the variables that starts with a `C_` denotes
 #: a config parameter. 
 C_WATCHDIR = "watchdir"
