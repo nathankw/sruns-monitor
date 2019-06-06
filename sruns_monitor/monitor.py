@@ -171,7 +171,7 @@ class Monitor:
         with self.lock:
             self.logger.error(msg)
         # Email notification
-        self.send_mail(subject="Shutting down", msg_body=msg)
+        self.send_mail(subject="Shutting down", body=msg)
         child_processes = psutil.Process().children()
         # Kill child processes by sending a SIGKILL.
         [c.kill() for c in child_processes] # equiv. to os.kill(pid, signal.SIGKILL) on UNIX.
@@ -349,7 +349,7 @@ class Monitor:
         Create a new record into the local sqlite db as well as the Firestore db.
         If mail is configured, sends an email notification about the new run first. 
         """
-        self.send_mail(subject="New run {}".format(run_name), msg_body=run_name)
+        self.send_mail(subject="New run {}".format(run_name), body=run_name)
         self.sqlite_conn_mainthread.insert_run(name=run_name)
         # Create Firestore document
         firestore_coll = self.get_firestore_conn()
@@ -446,7 +446,7 @@ class Monitor:
                 with self.lock:
                     self.logger.info("Deleted completed run directory {}".format(completed_run_path))
 
-    def send_mail(self, subject, msg_body):
+    def send_mail(self, subject, body):
         """
         Sends an email if the mail parameters are provided in the configuration.  
         Prior to sending an email, the subject and body of the email will be logged. 
@@ -454,7 +454,7 @@ class Monitor:
         Args:
             subject: `str`. The email's subject. Note that the subject will be mangled a bit - 
                 it will be prefixed with `self.monitor_Name` plus a colon and a space. 
-            msg_body: `str`. The email body w/o any markup.
+            body: `str`. The email body w/o any markup.
 
         Returns: `None`. 
         """
@@ -470,8 +470,8 @@ class Monitor:
                 Sending mail
                     Subject: {}
                     Body: {}
-            """.format(subject, msg_body))
-        utils.send_mail(from_addr=from_addr, to_addrs=tos, subject=subject, body=msg_body, host=host)
+            """.format(subject, body))
+        utils.send_mail(from_addr=from_addr, to_addrs=tos, subject=subject, body=body, host=host)
 
 
     def start(self):
