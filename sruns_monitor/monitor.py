@@ -58,6 +58,9 @@ class Monitor:
         #: Stores the validated JSON configuration file as a dictionary. Any top-level keys in the
         #: JSON file that were commented out (start with a '#') are not present here. 
         self.conf = self._validate_conf(conf_file)
+        #: The name of the monitor. The name will appear in the subject line if email notification
+        #: is configured, as well as in other places, i.e. log messages.
+        self.monitor_name = self.conf[srm.C_MONITOR_NAME]
         #: The name of the Firestore collection to use. If not provided in configuration, will be
         #: None.
         self.firestore_collection = self.conf.get("firestore_collection")
@@ -164,12 +167,11 @@ class Monitor:
                 handler for a specific type of signal in the funtion `signal.signal`.
         """
         signame = signal.Signals(signum).name
+        msg = "{} caught signal {}. Preparing for shutdown.".format(self.monitor_name, signame)
         with self.lock:
-            msg = "Caught signal {}. Preparing for shutdown.".format(signame)
             self.logger.error(msg)
-            self.send_mail(subject="", msg_body=msg)
-        # email notification
-        pid = os.getpid()
+        # Email notification
+        self.send_mail(subject="Shutting down", msg_body=msg)
         child_processes = psutil.Process().children()
         # Kill child processes by sending a SIGKILL.
         [c.kill() for c in child_processes] # equiv. to os.kill(pid, signal.SIGKILL) on UNIX.
@@ -347,7 +349,7 @@ class Monitor:
         Create a new record into the local sqlite db as well as the Firestore db.
         If mail is configured, sends an email notification about the new run first. 
         """
-        self.send_mail(subject="sruns-mon new run {}".format(run_name), msg_body=run_name)
+        self.send_mail(subject="New run {}".format(run_name), msg_body=run_name)
         self.sqlite_conn_mainthread.insert_run(name=run_name)
         # Create Firestore document
         firestore_coll = self.get_firestore_conn()
@@ -429,7 +431,7 @@ class Monitor:
                     with self.lock:
                         self.logger.info(msg)
                     # Send email notification
-                    self.send_mail(subject="sruns-mon run {} killed".format(run_name), body=msg)
+                    self.send_mail(subject="Run {} killed".format(run_name), body=msg)
             elif run_status == Db.RUN_STATUS_NOT_RUNNING:
                 self.run_workflow(run_name)
 
@@ -504,14 +506,14 @@ class Monitor:
                     with self.lock:
                         self.logger.error(msg)
                         self.logger.info("Sending email notification")
-                    self.send_mail(subject="sruns-mon error for run {}".format(run_name), body=msg)
+                    self.send_mail(subject="Error for run {}".format(run_name), body=msg)
                 self.clean_completed_runs()
                 time.sleep(self.cycle_pause_sec)
         except Exception as e:
             msg = "Main process Exception: {}".format(e)
             with self.lock:
                 self.logger.error(msg)
-            self.send_mail(subject="sruns-mon error", body=msg)
+            self.send_mail(subject="Error", body=msg)
             raise
 
 
