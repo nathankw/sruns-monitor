@@ -52,7 +52,10 @@ setup(
   long_description_content_type = "text/x-rst",
   name = "sruns-monitor",
   packages = find_packages(),
-  package_data = {"sruns_monitor.tests": ["SEQ_RUNS/*/*"]},
+  package_data = {
+      "sruns_monitor": ["schema.json"],
+      "sruns_monitor.tests": ["SEQ_RUNS/*/*"]
+  },
   project_urls = {
       "Read the Docs": "https://sruns-monitor.readthedocs.io/en/latest"
   },
