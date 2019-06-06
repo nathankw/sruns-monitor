@@ -62,7 +62,7 @@
         },
         "sweep_age_sec": {
             "description": "For runs in the path specified by completed_runs_dir, directories older than this number of seconds will be deleted",
-            "type": "string"
+            "type": "integer"
         }
     },
     "additionalProperties": false,
