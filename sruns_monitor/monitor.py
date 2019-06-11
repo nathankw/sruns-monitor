@@ -479,7 +479,7 @@ class Monitor:
         try:
             while True:
                 cycle_num += 1
-                self.logger.info("Cycle", cycle_num)
+                self.logger.info("Cycle {}".format(cycle_num))
                 # Remove any zombie processes
                 # Curious why or how this works? See book Programming Python, 4th ed. section
                 # "Killing the zombies: Don't fear the reaper!".
