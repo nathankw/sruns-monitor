@@ -42,6 +42,9 @@ def get_logfile_name(tag):
     """
     filename = "log_" + tag + ".txt"
     filename = os.path.join(LOG_DIR, filename)
+    print("##################################")
+    print(os.path.abspath(filename))
+    print("##################################")
     return filename
 
 FORMATTER = logging.Formatter('%(asctime)s:%(name)s:%(levelname)s\t%(message)s')
