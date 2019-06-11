@@ -239,7 +239,7 @@ class Monitor:
             rundir_path = self.get_rundir_path(run_name)
             tarball_name = rundir_path + ".tar.gz"
             with lock:
-                self.logger.debug("Tarring sequencing run {}.".format(run_name))
+                self.logger.info("Tarring sequencing run {}.".format(run_name))
             # Update status of Firestore record
             self.firestore_update_status(run_name=run_name, status=Db.RUN_STATUS_TARRING)
             tarball = utils.tar(rundir_path, tarball_name)
@@ -289,7 +289,7 @@ class Monitor:
             # A `google.cloud.storage.bucket.Bucket` instance.
             bucket = storage_client.get_bucket(self.bucket_name)
             with lock:
-                self.logger.debug("Uploading {} to GCP Storage bucket {} as {}.".format(tarfile,bucket, blob_name))
+                self.logger.info("Uploading {} to GCP Storage bucket {} as {}.".format(tarfile,bucket, blob_name))
             # Update status of Firestore record
             self.firestore_update_status(run_name=run_name, status=Db.RUN_STATUS_UPLOADING)
             utils.upload_to_gcp(bucket=bucket, blob_name=blob_name, source_file=tarfile)
@@ -341,7 +341,7 @@ class Monitor:
         from_path = self.get_rundir_path(run_name)
         to_path = os.path.join(self.completed_runs_dir, run_name)
         with self.lock:
-            self.logger.debug("Moving run {run} to completed runs location {loc}.".format(run=run_name, loc=to_path))
+            self.logger.info("Moving run {run} to completed runs location {loc}.".format(run=run_name, loc=to_path))
         os.rename(from_path, to_path)
 
     def process_new_run(self, run_name):
@@ -416,7 +416,7 @@ class Monitor:
         """
         for run_name in run_names:
             with self.lock:
-                self.logger.debug("Processing rundir {}".format(run_name))
+                self.logger.info("Processing rundir {}".format(run_name))
             run_status = self.sqlite_conn_mainthread.get_run_status(run_name)
             if run_status == Db.RUN_STATUS_NEW:
                 self.process_new_run(run_name)
