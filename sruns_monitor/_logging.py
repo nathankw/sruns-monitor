@@ -39,7 +39,7 @@ def add_file_handler(logger, level, tag):
             log file's purpose.
     """
     filename = get_logfile_name(tag)
-    logger.info("Creating log file ", os.path.abspath(filename))
+    logger.info("Creating log file {}".format(os.path.abspath(filename)))
     handler = logging.FileHandler(filename=filename, mode="a")
     handler.setLevel(level)
     handler.setFormatter(FORMATTER)

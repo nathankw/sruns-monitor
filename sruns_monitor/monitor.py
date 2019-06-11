@@ -214,6 +214,7 @@ class Monitor:
         firestore_payload = {
             srm.FIRESTORE_ATTR_WF_STATUS: status
         }
+        self.logger.info("Firestore: Set {} status to {}.".format(run_name, status))
         firestore_coll.document(run_name).set(firestore_payload)
 
     def task_tar(self, state,  run_name, lock, sqlite_conn):
@@ -357,6 +358,7 @@ class Monitor:
             firestore_payload = {
                 srm.FIRESTORE_ATTR_WF_STATUS: Db.RUN_STATUS_STARTING
             }
+            self.logger.info("Firestore: new run {}".format(run_name))
             firestore_coll.document(run_name).set(firestore_payload)
         self.run_workflow(run_name)
 
@@ -389,6 +391,7 @@ class Monitor:
                 srm.FIRESTORE_ATTR_WF_STATUS: Db.RUN_STATUS_COMPLETE,
                 srm.FIRESTORE_ATTR_STORAGE: rec[Db.TASKS_GCP_TARFILE]
             }
+            self.logger.info("Firestore: run {} complete.".format(run_name))
             firestore_conn.document(run_name).update(firestore_payload)
 
     def run_workflow(self, run_name):
