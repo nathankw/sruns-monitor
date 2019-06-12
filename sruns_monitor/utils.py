@@ -13,7 +13,7 @@ import pdb
 import sruns_monitor as srm
 
 
-def tar(input_dir, tarball_name):
+def tar(input_dir, tarball_name, compress=False):
     """
     Creates a tar.gz tarball of the provided directory and returns the tarball's name.
     The tarball's name is the same as the input directory's name, but with a .tar.gz extension.
@@ -21,11 +21,17 @@ def tar(input_dir, tarball_name):
     Args:
         input_dir: `str`. Path to the directory to tar up.
         tarball_name: `str`. Name of the output tarball.
+        compress: `boolean`. True enables gzip compression. Not recommended with the latest types of
+            Illumina runs, i.e. NovaSeq, since the files are mostly binary which isn't compressible. 
+            For example, I compressed a 428 GB NovaSeq run with 'tar -zcf' and the output was 422 GB.
 
     Returns:
         `None`.
     """
-    with tarfile.open(tarball_name, mode="w:gz") as tb:
+    mode = 'w'
+    if compress:
+        mode = "w:gz"
+    with tarfile.open(tarball_name, mode=mode) as tb:
         tb.add(name=input_dir, arcname=os.path.basename(input_dir))
 
 def upload_to_gcp(bucket, blob_name, source_file):
