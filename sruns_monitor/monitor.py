@@ -220,8 +220,8 @@ class Monitor:
     def task_tar(self, state,  run_name, lock, sqlite_conn):
         """
         Creates a gzip tarfile of the run directory and updates the Firestore record's status to
-        indicate that this task is running. The tarfile will be created in the directory
-        being watched (`self.watchdir`) and named the same as the `run_name` parameter, but with
+        indicate that this task is running. The tarfile will be created in the output directory
+        specified by `sruns_monitor.OUT_DIR` and named the same as the `run_name` parameter, but with
         a .tar.gz suffix.
 
         Once tarring is complete, the local database record is updated such that the attribute
@@ -237,12 +237,12 @@ class Monitor:
         """
         try:
             sqlite_conn.update_run(name=run_name, payload={Db.TASKS_PID: os.getpid()})
-            rundir_path = self.get_rundir_path(run_name)
-            tarball_name = rundir_path + ".tar.gz"
+            tarball_name = os.path.join(srm.OUT_DIR, run_name + ".tar.gz")
             with lock:
                 self.logger.info("Tarring sequencing run {}.".format(run_name))
             # Update status of Firestore record
             self.firestore_update_status(run_name=run_name, status=Db.RUN_STATUS_TARRING)
+            rundir_path = self.get_rundir_path(run_name)
             tarball = utils.tar(rundir_path, tarball_name)
             sqlite_conn.update_run(name=run_name, payload={Db.TASKS_TARFILE: tarball_name})
             # Update status of Firestore record
