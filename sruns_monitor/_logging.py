@@ -10,10 +10,12 @@ import logging
 import os
 import sys
 
+import sruns_monitor as srm
+
 
 FORMATTER = logging.Formatter('%(asctime)s:%(name)s:%(levelname)s\t%(message)s')
 #: The log directory. Will be created if it doesn't exist yet.
-LOG_DIR = "Logs_" + __package__.capitalize()
+LOG_DIR = os.path.join(srm.OUT_DIR, "Logs_" + __package__.capitalize())
 if not os.path.exists(LOG_DIR):
     os.mkdir(LOG_DIR)
 
