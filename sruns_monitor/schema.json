@@ -28,12 +28,14 @@
             "description": "The name of the monitor. The name will appear in the subject line if email notification is configured, as well as in other places, i.e. log messages.",
             "type": "string"
         },
-        "watchdir": {
+        "watchdirs": {
             "description": "Directory in which to look for new sequencing runs",
-            "type": "string" 
+            "type": "array",
+            "uniqueItems": true,
+            "items": {"type": "string"}
         },
         "completed_runs_dir": {
-            "description": "Directory in which to move sequencing runs that have completed the workflow.",
+            "description": "Directory in which to move sequencing runs that have completed the workflow. If not provided, defaults to SRM_COMPLETED in the calling directory.",
             "type": "string"
         },
         "cycle_pause_sec": {

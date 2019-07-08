@@ -67,12 +67,14 @@ class Monitor:
         if not self.firestore_collection:
             self.logger.warn("Firestore not enabled.")
 
-        self.watchdir = self.conf[srm.C_WATCHDIR]
-        if not os.path.exists(self.watchdir):
-            raise ConfigException("'watchdir' is a required property and the referenced directory must exist.".format(self.watchdir))
+        self.watchdirs = self.conf[srm.C_WATCHDIRS]
+        # Make sure that all watch directories already exist:
+        for path in self.watchdirs:
+            if not os.path.exists(path):
+                raise ConfigException("'watchdirs' is a required property and the referenced directory must exist.".format(path))
         self.completed_runs_dir = self.conf.get(srm.C_COMPLETED_RUNS_DIR)
         if not self.completed_runs_dir:
-            self.completed_runs_dir = os.path.join(os.path.dirname(self.watchdir), "SRM_COMPLETED")
+            self.completed_runs_dir = os.path.join(os.path.getcwd(), "SRM_COMPLETED")
         if not os.path.exists(self.completed_runs_dir):
             os.mkdir(self.completed_runs_dir)
         #: When a run in the completed runs directory is older than this many seconds, remove it.
@@ -178,9 +180,6 @@ class Monitor:
         self.sqlite_conn_mainthread.conn.close()
         sys.exit(128 + signum)
 
-    def get_rundir_path(self, run_name):
-        return os.path.join(self.watchdir, run_name)
-
     def _workflow(self, state, lock, run_name):
         """
         Runs the workflow. Knows which stages to run, which is useful if the workflow needs to
@@ -242,8 +241,9 @@ class Monitor:
                 self.logger.info("Tarring sequencing run {}.".format(run_name))
             # Update status of Firestore record
             self.firestore_update_status(run_name=run_name, status=Db.RUN_STATUS_TARRING)
-            rundir_path = self.get_rundir_path(run_name)
-            tarball = utils.tar(rundir_path, tarball_name)
+            rec = sqlite_conn.get_run(run_name)
+            run_path = rec[Db.TASKS_RUNDIR_PATH]
+            tarball = utils.tar(run_path, tarball_name)
             sqlite_conn.update_run(name=run_name, payload={Db.TASKS_TARFILE: tarball_name})
             # Update status of Firestore record
             self.firestore_update_status(run_name=run_name, status=Db.RUN_STATUS_TARRING_COMPLETE)
@@ -335,6 +335,10 @@ class Monitor:
                 # The next iteration of the monitor will see that the pid isn't running and restart
                 # the workflow if it hasn't finished yet.
 
+    def get_rundir_path(self, run_name):
+        rec = sqlite_conn.get_run(run_name)
+        return = rec[Db.TASKS_RUNDIR_PATH]
+
     def archive_run(self, run_name):
         """
         Moves the run directory to the completed runs directory.
@@ -345,13 +349,17 @@ class Monitor:
             self.logger.info("Moving run {run} to completed runs location {loc}.".format(run=run_name, loc=to_path))
         os.rename(from_path, to_path)
 
-    def process_new_run(self, run_name):
+    def process_new_run(self, run):
         """
         Create a new record into the local sqlite db as well as the Firestore db.
         If mail is configured, sends an email notification about the new run first. 
+
+        Args:
+            run: `str`. Path to a run directory.
         """
+        run_name = os.path.basename(run)
         self.send_mail(subject="New run {}".format(run_name), body=run_name)
-        self.sqlite_conn_mainthread.insert_run(name=run_name)
+        self.sqlite_conn_mainthread.insert_run(rundir_path=run)
         # Create Firestore document
         firestore_coll = self.get_firestore_conn()
         if firestore_coll:
@@ -400,29 +408,37 @@ class Monitor:
 
     def scan(self):
         """
-        Finds all sequencing run in `self.watchdir` that are finished sequencing.
-        """
-        run_names = []
-        for run_name in os.listdir(self.watchdir):
-            rundir_path = self.get_rundir_path(run_name)
-            if not os.path.isdir(rundir_path):
-                continue
-            if set(os.listdir(rundir_path)).intersection(self.SENTINAL_FILES):
-                # This is a completed run directory
-                run_names.append(run_name)
-        return run_names
+        Finds all sequencing runs in `self.watchdirs` that are finished sequencing.
 
-    def process_rundirs(self, run_names):
+        Returns:
+            `list`. Each element is the path to a run directory.
+        """
+        run_paths = []
+        for path in self.watchdirs:
+            for run_name in os.listdir(path):
+                run_path = os.path.join(path,run_name)
+                if not os.path.isdir(run_path):
+                    continue
+                if set(os.listdir(run_path)).intersection(self.SENTINAL_FILES):
+                    # This is a completed run directory
+                    run_paths.append(run_path)
+        return run_paths
+
+    def process_rundirs(self, runs):
         """
         For each sequencing run name, checks it's status with regard to the workflow and initiates
         any remaining steps, i.e. restart, cleanup, ...
+
+        Args:
+            runs: `list` where each element is the path to a run directory.
         """
-        for run_name in run_names:
+        for run in runs:
+           run_name = os.path.basename(run)
             with self.lock:
                 self.logger.info("Processing rundir {}".format(run_name))
             run_status = self.sqlite_conn_mainthread.get_run_status(run_name)
             if run_status == Db.RUN_STATUS_NEW:
-                self.process_new_run(run_name)
+                self.process_new_run(run)
             elif run_status == Db.RUN_STATUS_COMPLETE:
                 self.process_completed_run(run_name)
             elif run_status == Db.RUN_STATUS_RUNNING:
@@ -476,7 +492,6 @@ class Monitor:
             """.format(subject, body))
         utils.send_mail(from_addr=from_addr, to_addrs=tos, subject=subject, body=body, host=host)
 
-
     def start(self):
         cycle_num = 0
         try:
@@ -488,12 +503,12 @@ class Monitor:
                 # "Killing the zombies: Don't fear the reaper!".
                 try:
                     os.waitpid(0, os.WNOHANG)
-                    # The 0 argument above means to check for any child process, not one with a
+                    # The 0 argument above means to check for any completed child process, not one with a
                     # specific pid.
                 except ChildProcessError:
                     pass # No child processes
                 finished_rundirs = self.scan()
-                self.process_rundirs(run_names=finished_rundirs)
+                self.process_rundirs(runs=finished_rundirs)
                 # Now check the shared queue object to see if any child process ran into some trouble
                 # and recorded its dying last words:
                 child_process_msg = None

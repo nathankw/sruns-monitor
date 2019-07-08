@@ -35,6 +35,9 @@ class Db:
     TASKS_TARFILE = "tarfile"
     #: 'tasks' table attribute name that stores the path to the gzip tarfile in a GCP Storage bucket.
     TASKS_GCP_TARFILE = "gcp_tarfile"
+    #: 'tasks' table attribute name that stores the path to the run directory.
+    TASKS_RUNDIR_PATH = "rundir_path"
+    
 
     # Constants to define the status of a record.
     #: Status value for a new sequencing run.                                                       
@@ -88,12 +91,14 @@ class Db:
                 {name} text PRIMARY KEY,
                 {pid} integer,
                 {tarfile} text,
-                {gcp_tarfile} text);
+                {gcp_tarfile} text,
+                {rundir_path});
             """.format(table=self.TASKS_TABLE_NAME,  
                        name=self.TASKS_NAME, 
                        pid=self.TASKS_PID,
                        tarfile=self.TASKS_TARFILE,
-                       gcp_tarfile=self.TASKS_GCP_TARFILE)
+                       gcp_tarfile=self.TASKS_GCP_TARFILE,
+                       rundir_path=self.TASKS_RUNDIR_PATH)
         with self.conn as conn:
             conn.execute(create_table_sql)
 
@@ -133,13 +138,13 @@ class Db:
         except psutil.NoSuchProcess:
             return self.RUN_STATUS_NOT_RUNNING
 
-    def insert_run(self, name, pid=0, tarfile="", gcp_tarfile=""):
+    def insert_run(self, rundir_path, pid=0, tarfile="", gcp_tarfile=""):
         """
         Creates a new record in the database. You most likely only need to set the name attribute
         since other attributes will be set by the workflow as it progresses. 
 
         Args:
-            name: `str`. Value for the *name* attribute. Set this to the sequencing run name. 
+            rundir_path: `str`. Sequencing run directory path. 
             pid: `int`. Value for the *pid* attribute that should be the process ID of the workflow
                 if running already. 
             tarfile: `str`. The name of the tarfile. Doesn't make sense to set if the workflow task
@@ -150,19 +155,22 @@ class Db:
         Returns: None
  
         """
+        run_name = os.path.basename(rundir_path)
         sql = """
-              INSERT INTO {table}({name_attr},{pid_attr},{tarfile_attr},{gcp_tarfile_attr})
-              VALUES('{name}',{pid},'{tarfile}','{gcp_tarfile}');
+              INSERT INTO {table}({name_attr},{pid_attr},{tarfile_attr},{gcp_tarfile_attr},{rundir_path_attr})
+              VALUES('{name}',{pid},'{tarfile}','{gcp_tarfile}','{rundir_path}');
               """.format(
                   table=self.TASKS_TABLE_NAME,
                   name_attr=self.TASKS_NAME,
                   pid_attr=self.TASKS_PID,
                   tarfile_attr=self.TASKS_TARFILE,
                   gcp_tarfile_attr=self.TASKS_GCP_TARFILE,
-                  name=name,
+                  rundir_path_attr=self.TASKS_RUNDIR_PATH,
+                  name=run_name,
                   pid=pid,
                   tarfile=tarfile,
-                  gcp_tarfile=gcp_tarfile)
+                  gcp_tarfile=gcp_tarfile,
+                  rundir_path=rundir_path)
         self.log(msg=sql, verbose=True)
         with self.conn as conn:
             conn.execute(sql) # Returns the sqlite3.Cursor object. 
@@ -187,11 +195,12 @@ class Db:
             `tuple`: A record whose name attribute has the supplied name exists. 
             `None`: No such record exists.
         """
-        sql = "SELECT {name},{pid},{tarfile},{gcp_tarfile} FROM {table} WHERE {name}='{input_name}';".format(
+        sql = "SELECT {name},{pid},{tarfile},{gcp_tarfile},{rundir_path} FROM {table} WHERE {name}='{input_name}';".format(
             name=self.TASKS_NAME, 
             pid=self.TASKS_PID,
             tarfile=self.TASKS_TARFILE, 
             gcp_tarfile=self.TASKS_GCP_TARFILE, 
+            rundir_path=self.TASKS_RUNDIR_PATH,
             table=self.TASKS_TABLE_NAME,
             input_name=name)
 
@@ -204,6 +213,7 @@ class Db:
             self.TASKS_PID: res[1],
             self.TASKS_TARFILE: res[2],
             self.TASKS_GCP_TARFILE: res[3]
+            self.TASKS_RUNDIR_PATH: res[4]
         }
 
     def delete_run(self, name):
