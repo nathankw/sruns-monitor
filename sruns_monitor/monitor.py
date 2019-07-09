@@ -214,7 +214,7 @@ class Monitor:
             srm.FIRESTORE_ATTR_WF_STATUS: status
         }
         self.logger.info("Firestore: Set {} status to {}.".format(run_name, status))
-        firestore_coll.document(run_name).set(firestore_payload)
+        firestore_coll.document(run_name).update(firestore_payload)
 
     def task_tar(self, state,  run_name, lock, sqlite_conn):
         """
@@ -290,13 +290,14 @@ class Monitor:
             # A `google.cloud.storage.bucket.Bucket` instance.
             bucket = storage_client.get_bucket(self.bucket_name)
             with lock:
-                self.logger.info("Uploading {} to GCP Storage bucket {} as {}.".format(tarfile,bucket, blob_name))
+                self.logger.info("Uploading {} to GCP Storage bucket {} as {}.".format(tarfile,self.bucket_name, blob_name))
             # Update status of Firestore record
             self.firestore_update_status(run_name=run_name, status=Db.RUN_STATUS_UPLOADING)
             utils.upload_to_gcp(bucket=bucket, blob_name=blob_name, source_file=tarfile)
+            bucket_blob_path = "/".join([self.bucket_name, blob_name])
             sqlite_conn.update_run(
                 name=run_name,
-                payload={Db.TASKS_GCP_TARFILE: "/".join([self.bucket_name, blob_name])})
+                payload={Db.TASKS_GCP_TARFILE: bucket_blob_path})
             # Remove local tarfile
             os.remove(tarfile)
             # Update status of Firestore record
@@ -336,7 +337,7 @@ class Monitor:
                 # the workflow if it hasn't finished yet.
 
     def get_rundir_path(self, run_name):
-        rec = sqlite_conn.get_run(run_name)
+        rec = self.sqlite_conn_mainthread.get_run(run_name)
         return rec[Db.TASKS_RUNDIR_PATH]
 
     def archive_run(self, run_name):
@@ -364,6 +365,7 @@ class Monitor:
         firestore_coll = self.get_firestore_conn()
         if firestore_coll:
             firestore_payload = {
+                srm.FIRESTORE_ATTR_RUN_NAME: run_name,
                 srm.FIRESTORE_ATTR_WF_STATUS: Db.RUN_STATUS_STARTING
             }
             self.logger.info("Firestore: new run {}".format(run_name))
@@ -399,7 +401,7 @@ class Monitor:
                 srm.FIRESTORE_ATTR_WF_STATUS: Db.RUN_STATUS_COMPLETE,
                 srm.FIRESTORE_ATTR_STORAGE: rec[Db.TASKS_GCP_TARFILE]
             }
-            self.logger.info("Firestore: run {} complete.".format(run_name))
+            self.logger.info("Firestore: Update run record {} with {}.".format(run_name, firestore_payload))
             firestore_conn.document(run_name).update(firestore_payload)
 
     def run_workflow(self, run_name):
