@@ -56,7 +56,7 @@ class TestStatus(unittest.TestCase):
         should return the status `Db.RUN_STATUS_COMPLETE`.
         """
         run_name = "testrun"
-        self.db.insert_run(name=run_name, tarfile="run.tar.gz", gcp_tarfile="/bucket/obj.tar.gz")
+        self.db.insert_run(rundir_path=run_name, tarfile="run.tar.gz", gcp_tarfile="/bucket/obj.tar.gz")
         status = self.db.get_run_status(run_name)
         self.assertEqual(status, Db.RUN_STATUS_COMPLETE)
 
@@ -66,7 +66,7 @@ class TestStatus(unittest.TestCase):
         `Db.get_run_status` should return the status `Db.RUN_STATUS_NOT_RUNNING`.
         """
         run_name = "testrun"
-        self.db.insert_run(name=run_name, tarfile="run.tar.gz", gcp_tarfile="", pid=0)
+        self.db.insert_run(rundir_path=run_name, tarfile="run.tar.gz", gcp_tarfile="", pid=0)
         status = self.db.get_run_status(run_name)
         self.assertEqual(status, Db.RUN_STATUS_NOT_RUNNING)
 
@@ -77,7 +77,7 @@ class TestStatus(unittest.TestCase):
         status `Db.RUN_STATUS_NOT_RUNNING`.
         """
         run_name = "testrun"
-        self.db.insert_run(name=run_name, tarfile="run.tar.gz", gcp_tarfile="", pid=1010101010)
+        self.db.insert_run(rundir_path=run_name, tarfile="run.tar.gz", gcp_tarfile="", pid=1010101010)
         status = self.db.get_run_status(run_name)
         self.assertEqual(status, Db.RUN_STATUS_NOT_RUNNING)
 
@@ -88,7 +88,7 @@ class TestStatus(unittest.TestCase):
         `Db.RUN_STATUS_STARTING`.
         """
         run_name = "testrun"
-        self.db.insert_run(name=run_name, tarfile="run.tar.gz", gcp_tarfile="", pid=os.getpid())
+        self.db.insert_run(rundir_path=run_name, tarfile="run.tar.gz", gcp_tarfile="", pid=os.getpid())
         status = self.db.get_run_status(run_name)
         self.assertEqual(status, Db.RUN_STATUS_RUNNING)
 
@@ -98,6 +98,10 @@ class TestDb(unittest.TestCase):
     """
     Tests the record creation/modification methods in the class `sruns_monitor.Db`.
     """
+
+    WATCH_DIR = "watchdir"
+    RUN_NAME = "first_run"
+    RUN_PATH = os.path.join(WATCH_DIR, RUN_NAME)
 
     def setUp(self):
         self.dbfile = "test.db"
@@ -128,14 +132,14 @@ class TestDb(unittest.TestCase):
         Tests `sqlite_utls.Db.insert_run` for success when creating a new record with only the name
         attribute set.
         """
-        run_name = "first_run"
-        self.db.insert_run(name=run_name)
-        rec = self.db.get_run(run_name)
+        self.db.insert_run(rundir_path=self.RUN_PATH)
+        rec = self.db.get_run(self.RUN_NAME)
         expected = {
-            Db.TASKS_NAME: run_name,
+            Db.TASKS_NAME: self.RUN_NAME,
             Db.TASKS_PID: 0,
             Db.TASKS_TARFILE: '',
-            Db.TASKS_GCP_TARFILE: ''
+            Db.TASKS_GCP_TARFILE: '',
+            Db.TASKS_RUNDIR_PATH: self.RUN_PATH
         }
         self.assertTrue(rec == expected)
 
@@ -144,15 +148,15 @@ class TestDb(unittest.TestCase):
         Tests `sqlite_utls.Db.insert_run` for success when creating a new record with only the name
         and pid attributes set.
         """
-        run_name = "first_run"
         pid = 77103
-        self.db.insert_run(name=run_name, pid=pid)
-        rec = self.db.get_run(run_name)
+        self.db.insert_run(rundir_path=self.RUN_PATH, pid=pid)
+        rec = self.db.get_run(self.RUN_NAME)
         expected = {
-            Db.TASKS_NAME: run_name,
+            Db.TASKS_NAME: self.RUN_NAME,
             Db.TASKS_PID: pid,
             Db.TASKS_TARFILE: '',
-            Db.TASKS_GCP_TARFILE: ''
+            Db.TASKS_GCP_TARFILE: '',
+            Db.TASKS_RUNDIR_PATH: self.RUN_PATH
         }
         self.assertTrue(rec == expected)
 
@@ -161,17 +165,17 @@ class TestDb(unittest.TestCase):
         Tests `sqlite_utls.Db.update_run` for success when updating an existing record to add a value
         for the local tarfile path.
         """
-        run_name = "first_run"
         pid = 77103
-        self.db.insert_run(name=run_name, pid=pid)
-        tarfile = run_name + ".tar.gz"
-        self.db.update_run(name=run_name, payload={Db.TASKS_TARFILE: tarfile})
-        rec = self.db.get_run(run_name)
+        self.db.insert_run(rundir_path=self.RUN_PATH, pid=pid)
+        tarfile = self.RUN_NAME + ".tar.gz"
+        self.db.update_run(name=self.RUN_NAME, payload={Db.TASKS_TARFILE: tarfile})
+        rec = self.db.get_run(self.RUN_NAME)
         expected = {
-            Db.TASKS_NAME: run_name,
+            Db.TASKS_NAME: self.RUN_NAME,
             Db.TASKS_PID: pid,
             Db.TASKS_TARFILE: tarfile,
-            Db.TASKS_GCP_TARFILE: ''
+            Db.TASKS_GCP_TARFILE: '',
+            Db.TASKS_RUNDIR_PATH: self.RUN_PATH
         }
         self.assertTrue(rec == expected)
 
@@ -180,19 +184,18 @@ class TestDb(unittest.TestCase):
         Tests `sqlite_utls.Db.update_run` for success when updating an existing record to add a value
         for the gcp_tarfile path.
         """
-        run_name = "first_run"
         pid = 77103
-        tarfile = run_name + ".tar.gz"
-        self.db.insert_run(name=run_name, pid=pid, tarfile=tarfile)
-        gcp_tarfile = "run_name/run_name.tar.gz"
-        self.db.update_run(name=run_name, payload={Db.TASKS_GCP_TARFILE: gcp_tarfile})
-        rec = self.db.get_run(run_name)
-        print(rec)
+        tarfile = self.RUN_NAME + ".tar.gz"
+        self.db.insert_run(rundir_path=self.RUN_PATH, pid=pid, tarfile=tarfile)
+        gcp_tarfile = self.RUN_NAME + "/" + self.RUN_NAME + ".tar.gz"
+        self.db.update_run(name=self.RUN_NAME, payload={Db.TASKS_GCP_TARFILE: gcp_tarfile})
+        rec = self.db.get_run(self.RUN_NAME)
         expected = {
-            Db.TASKS_NAME: run_name,
+            Db.TASKS_NAME: self.RUN_NAME,
             Db.TASKS_PID: pid,
             Db.TASKS_TARFILE: tarfile,
-            Db.TASKS_GCP_TARFILE: gcp_tarfile
+            Db.TASKS_GCP_TARFILE: gcp_tarfile,
+            Db.TASKS_RUNDIR_PATH: self.RUN_PATH
         }
         self.assertTrue(rec == expected)
 

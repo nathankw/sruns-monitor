@@ -7,8 +7,9 @@
 
 import os
 
-WATCH_DIR = os.path.join(os.path.dirname(__file__), "SEQ_RUNS")
-COMPLETED_RUNS_DIR = os.path.join(os.path.dirname(__file__), "COMPLETED_RUNS")
+WATCH_DIR1 = os.path.join(os.path.dirname(__file__), "SEQ_RUNS", "NovaSeq1")
+WATCH_DIR2 = os.path.join(os.path.dirname(__file__), "SEQ_RUNS", "NovaSeq2")
+WATCH_DIRS = [WATCH_DIR1, WATCH_DIR2]
 
 #: Used for storing output from tests. Tests do attempt to clean up after themselves.
 #: Will be created if it doesn't exist yet. 

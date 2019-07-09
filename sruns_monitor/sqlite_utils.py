@@ -2,6 +2,7 @@
 
 import logging
 import multiprocessing
+import os
 import sqlite3
 import time
 
@@ -212,7 +213,7 @@ class Db:
             self.TASKS_NAME: res[0],
             self.TASKS_PID: res[1],
             self.TASKS_TARFILE: res[2],
-            self.TASKS_GCP_TARFILE: res[3]
+            self.TASKS_GCP_TARFILE: res[3],
             self.TASKS_RUNDIR_PATH: res[4]
         }
 

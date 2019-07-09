@@ -50,9 +50,9 @@ class Monitor:
         """
         self.logger = logging.getLogger(__name__)
         # Add debug file handler to self.logger:
-        srm.add_file_handler(logger=self.logger, level=logging.DEBUG, tag="debug")
+        srm.add_file_handler(logger=self.logger, log_dir=srm.LOG_DIR, level=logging.DEBUG, tag="debug")
         # Add error file handler to self.logger:
-        srm.add_file_handler(logger=self.logger, level=logging.ERROR, tag="error")
+        srm.add_file_handler(logger=self.logger, log_dir=srm.LOG_DIR, level=logging.ERROR, tag="error")
         #: Stores the value passed during instantiation to the parameter by the same name. 
         self.verbose = verbose
         #: Stores the validated JSON configuration file as a dictionary. Any top-level keys in the
@@ -74,7 +74,7 @@ class Monitor:
                 raise ConfigException("'watchdirs' is a required property and the referenced directory must exist.".format(path))
         self.completed_runs_dir = self.conf.get(srm.C_COMPLETED_RUNS_DIR)
         if not self.completed_runs_dir:
-            self.completed_runs_dir = os.path.join(os.path.getcwd(), "SRM_COMPLETED")
+            self.completed_runs_dir = os.path.join(os.getcwd(), "SRM_COMPLETED")
         if not os.path.exists(self.completed_runs_dir):
             os.mkdir(self.completed_runs_dir)
         #: When a run in the completed runs directory is older than this many seconds, remove it.
@@ -337,7 +337,7 @@ class Monitor:
 
     def get_rundir_path(self, run_name):
         rec = sqlite_conn.get_run(run_name)
-        return = rec[Db.TASKS_RUNDIR_PATH]
+        return rec[Db.TASKS_RUNDIR_PATH]
 
     def archive_run(self, run_name):
         """
@@ -433,7 +433,7 @@ class Monitor:
             runs: `list` where each element is the path to a run directory.
         """
         for run in runs:
-           run_name = os.path.basename(run)
+            run_name = os.path.basename(run)
             with self.lock:
                 self.logger.info("Processing rundir {}".format(run_name))
             run_status = self.sqlite_conn_mainthread.get_run_status(run_name)

@@ -21,7 +21,9 @@ what is expected::
     "task_runtime_limit_sec": 86400                                                                      
   }
 
-This file must be named conf.json and must exist in the calling directory. 
+This file must be named conf.json and must exist in the calling directory. The user provided conf
+file should not specify the SQLite database name and the watch directories since those are set
+internally in process_user_conf_file().
 """
 
 import hashlib
@@ -32,7 +34,7 @@ import unittest
 from google.cloud import storage
 
 import sruns_monitor as srm
-from sruns_monitor.tests import WATCH_DIR, TMP_DIR
+from sruns_monitor.tests import WATCH_DIR1, WATCH_DIR2, WATCH_DIRS, TMP_DIR
 from sruns_monitor import utils
 from sruns_monitor.monitor import Monitor
 from sruns_monitor.sqlite_utils import Db 
@@ -46,6 +48,11 @@ SQLITE_DB = os.path.join(os.path.dirname(__file__), "monitortest.db")
 #: Flag that when set to True enables Firestore tests to run. This will be set to True automatically
 #: when the user's conf.json file contains the firestore_collection parameter. 
 FIRESTORE = False
+
+#: Some completed run directories
+CRUN1 = os.path.join(WATCH_DIR1, "CompletedRun1")
+CRUN2 = os.path.join(WATCH_DIR1, "CompletedRun2")
+CRUN3 = os.path.join(WATCH_DIR2, "TEST_RUN_DIR")
 
 def remove_test_db():
     if os.path.exists(SQLITE_DB):
@@ -69,7 +76,7 @@ def process_user_conf_file():
     firestore_coll = jconf.get(srm.C_FIRESTORE_COLLECTION)
     if firestore_coll and not firestore_coll.startswith("#"):
         FIRESTORE = True
-    jconf[srm.C_WATCHDIR] = WATCH_DIR
+    jconf[srm.C_WATCHDIRS] = WATCH_DIRS
     jconf[srm.C_SQLITE_DB] = SQLITE_DB
     fout = open(CONF_FILE, "w")
     fout.write(json.dumps(jconf, indent=4))
@@ -89,8 +96,9 @@ class TestTaskTar(unittest.TestCase):
         record is stored as `self.rec` for inspection in the various test methods.
         """
         self.monitor = Monitor(conf_file=CONF_FILE)
-        self.run_name = "CompletedRun1" # An actual test run directory
-        self.monitor.sqlite_conn_mainthread.insert_run(name=self.run_name)
+        self.run_path = CRUN1 # An actual test run directory
+        self.run_name = os.path.basename(self.run_path)
+        self.monitor.sqlite_conn_mainthread.insert_run(rundir_path=self.run_path)
         self.monitor.task_tar(state=self.monitor.state, run_name=self.run_name, lock=self.monitor.lock, sqlite_conn=self.monitor.get_sqlite_conn())
         self.rec = self.monitor.sqlite_conn_mainthread.get_run(name=self.run_name)
 
@@ -99,7 +107,7 @@ class TestTaskTar(unittest.TestCase):
         Tests `Monitor.scan` for success. It should find only the completed run directories.
         """
         rundirs = self.monitor.scan()
-        self.assertEqual(rundirs, ["CompletedRun1", "CompletedRun2", "TEST_RUN_DIR"])
+        self.assertEqual(rundirs, [CRUN1, CRUN2, CRUN3])
 
     def tearDown(self):
         """
@@ -152,12 +160,13 @@ class TestTaskUpload(unittest.TestCase):
         """
         self.monitor = Monitor(conf_file=CONF_FILE)
         self.bucket = get_bucket(self.monitor.bucket_name)
-        self.run_name = "CompletedRun1" # An actual test run directory
+        self.run_path = CRUN1 # An actual test run directory
+        self.run_name = os.path.basename(self.run_path)
         self.tarfile = os.path.join(TMP_DIR, "rundir.tar.gz")
         fh = open(self.tarfile, 'w')
         fh.write("test line")
         fh.close()
-        self.monitor.sqlite_conn_mainthread.insert_run(name=self.run_name, tarfile=self.tarfile)
+        self.monitor.sqlite_conn_mainthread.insert_run(rundir_path=self.run_path, tarfile=self.tarfile)
         self.monitor.task_upload(state=self.monitor.state, run_name=self.run_name, lock=self.monitor.lock, sqlite_conn=self.monitor.get_sqlite_conn())
         self.rec = self.monitor.sqlite_conn_mainthread.get_run(name=self.run_name)
 
@@ -221,8 +230,9 @@ class TestFirestore(unittest.TestCase):
         to starting.
         """
         self.monitor = Monitor(conf_file=CONF_FILE)
-        self.run_name = "CompletedRun1" # An actual test run directory
-        self.monitor.sqlite_conn_mainthread.insert_run(name=self.run_name)
+        self.run_path = CRUN1 # An actual test run directory
+        self.run_name = os.path.basename(self.run_path)
+        self.monitor.sqlite_conn_mainthread.insert_run(rundir_path=self.run_path)
         # Create Firestore document
         firestore_payload = {
             srm.FIRESTORE_ATTR_WF_STATUS: Db.RUN_STATUS_STARTING

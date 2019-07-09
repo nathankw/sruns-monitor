@@ -1,6 +1,6 @@
 
 {
-  "watchdir": "/some/path",
+  "watchdirs": ["/some/path"],
   "completed_runs_dir": "/path/to/dir",
   "sqlite_db": "test.db",
   "firestore_collection": "sequencing_runs",

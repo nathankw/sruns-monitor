@@ -68,6 +68,6 @@
         }
     },
     "additionalProperties": false,
-    "required": ["name", "watchdir", "gcp_bucket_name"]
+    "required": ["name", "watchdirs", "gcp_bucket_name"]
 }
 
