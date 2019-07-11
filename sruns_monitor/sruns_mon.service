@@ -4,7 +4,7 @@ Documentation=https://pypi.org/project/sruns-monitor
 
 [Service]
 Type=simple
-ExecStart=/usr/bin/docker run -w /tmp -v /tmp:/tmp -v /mnt/testruns/NovaSeq_A00731/:/mnt/testruns/NovaSeq_A00731/ -v /mnt/testruns/NovaSeq_A00737/:/mnt/testruns/NovaSeq_A00737/ gcr.io/cgsdevelopment-1216/sruns-monitor -c /tmp/sruns_mon.conf
+ExecStart=/usr/bin/docker run -w /tmp/smon -v /tmp/smon:/tmp/smon -v /mnt/testruns/NovaSeq_A00731/:/mnt/testruns/NovaSeq_A00731/ -v /mnt/testruns/NovaSeq_A00737/:/mnt/testruns/NovaSeq_A00737/ gcr.io/cgsdevelopment-1216/sruns-monitor -c /tmp/smon/sruns_mon.conf
 
 [Install]
 WantedBy=multi-user.target
