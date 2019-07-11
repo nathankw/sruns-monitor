@@ -72,9 +72,7 @@ class Monitor:
         for path in self.watchdirs:
             if not os.path.exists(path):
                 raise ConfigException("'watchdirs' is a required property and the referenced directory must exist.".format(path))
-        self.completed_runs_dir = self.conf.get(srm.C_COMPLETED_RUNS_DIR)
-        if not self.completed_runs_dir:
-            self.completed_runs_dir = os.path.join(os.getcwd(), "SRM_COMPLETED")
+        self.completed_runs_dir = os.path.join(srm.OUT_DIR, "SRM_COMPLETED")
         if not os.path.exists(self.completed_runs_dir):
             os.mkdir(self.completed_runs_dir)
         #: When a run in the completed runs directory is older than this many seconds, remove it.

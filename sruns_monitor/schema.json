@@ -34,10 +34,6 @@
             "uniqueItems": true,
             "items": {"type": "string"}
         },
-        "completed_runs_dir": {
-            "description": "Directory in which to move sequencing runs that have completed the workflow. If not provided, defaults to SRM_COMPLETED in the calling directory.",
-            "type": "string"
-        },
         "cycle_pause_sec": {
             "description": "The number of seconds that the monitor waits between scans",
             "type": "integer" 
