@@ -12,6 +12,7 @@ import logging
 from multiprocessing import Process, Queue, Lock
 import os
 import queue
+import shutil
 import signal
 import sys
 import tarfile
@@ -346,7 +347,7 @@ class Monitor:
         to_path = os.path.join(self.completed_runs_dir, run_name)
         with self.lock:
             self.logger.info("Moving run {run} to completed runs location {loc}.".format(run=run_name, loc=to_path))
-        os.rename(from_path, to_path)
+        shutil.move(from_path, to_path)
 
     def process_new_run(self, run):
         """
