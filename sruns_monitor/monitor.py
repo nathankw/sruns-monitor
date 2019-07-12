@@ -77,9 +77,9 @@ class Monitor:
             os.mkdir(self.completed_runs_dir)
         #: When a run in the completed runs directory is older than this many seconds, remove it.
         #: If not specified in configuration file, defaults to 604800 (1 week).
-        self.sweep_age_sec = self.conf[srm.C_SWEEP_AGE_SEC]
+        self.sweep_age_sec = self.conf.get(srm.C_SWEEP_AGE_SEC, 604800)
         #: The number of seconds to wait between run directory scans, with a default of 60.
-        self.cycle_pause_sec = self.conf[srm.C_CYCLE_PAUSE_SEC]
+        self.cycle_pause_sec = self.conf.get(srm.C_CYCLE_PAUSE_SEC, 60)
         #: The number of seconds that a child process running the workflow is allowed to run, after
         #: which the process will be killed. A value of 0 indicates that such a time limit will not
         #: be observed.
@@ -93,13 +93,15 @@ class Monitor:
         self.lock = Lock() # Must pass in manually to multiprocessing.Process constructors
         #: The GCP Storage bucket name in which tarred run directories will be stored.
         self.bucket_name = self.conf[srm.C_GCP_BUCKET_NAME]
-        #: The directory in the bucket in which to store tarred run directories.
-        self.bucket_basedir = self.conf[srm.C_GCP_BUCKET_BASEDIR]
+        #: The directory in the bucket in which to store tarred run directories. If not provided,
+        #: defaults to the root level directory.
+        self.bucket_basedir = self.conf.get(srm.C_GCP_BUCKET_BASEDIR, "/")
         #signal.signal(signal.SIGTERM, self._cleanup)
         signal.signal(signal.SIGINT, self._cleanup)
         signal.signal(signal.SIGTERM, self._cleanup)
-        #: The name of the local SQLite database.
-        self.sqlite_dbname = self.conf[srm.C_SQLITE_DB]
+        #: The name of the local SQLite database.  Name defaults to sruns.db if not provided in
+        #: the configuration.
+        self.sqlite_dbname = self.conf.get(srm.C_SQLITE_DB, "sruns.db")
         #: A `sqlite3.Connection` instance to be used by the main thread.
         self.sqlite_conn_mainthread = self.get_sqlite_conn()
 

@@ -36,7 +36,6 @@
         },
         "cycle_pause_sec": {
             "description": "The number of seconds that the monitor waits between scans",
-            "default": 60,
             "type": "integer" 
         },
         "task_runtime_limit_sec": {
@@ -53,17 +52,14 @@
         }, 
         "gcp_bucket_basedir": {
             "description": "The parent folder in the Google Storage bucket under which all files will be written",
-            "default": "/",
             "type": "string"
         },
         "sqlite_db": {
             "description": "The name of the local SQLite database for tracking local workflow state",
-            "default": "sruns.db",
             "type": "string"
         },
         "sweep_age_sec": {
             "description": "For runs in the path specified by completed_runs_dir, directories older than this number of seconds will be deleted",
-            "default": 604800,
             "type": "integer"
         }
     },
