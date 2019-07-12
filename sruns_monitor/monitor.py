@@ -526,7 +526,7 @@ class Monitor:
                         self.logger.info("Sending email notification")
                     self.send_mail(subject="Error for run {}".format(run_name), body=msg)
                 self.clean_completed_runs()
-                time.sleepp(self.cycle_pause_sec)
+                time.sleep(self.cycle_pause_sec)
         except Exception as e:
             tb = e.__traceback__
             tb_msg = traceback.extract_tb(tb).format()
