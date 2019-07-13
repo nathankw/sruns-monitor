@@ -11,6 +11,7 @@ import jsonschema
 import logging
 from multiprocessing import Process, Queue, Lock
 import os
+from pprint import pformat
 import queue
 import shutil
 import signal
@@ -529,7 +530,7 @@ class Monitor:
                 time.sleep(self.cycle_pause_sec)
         except Exception as e:
             tb = e.__traceback__
-            tb_msg = traceback.extract_tb(tb).format()
+            tb_msg = pformat(traceback.extract_tb(tb).format())
             msg = "Main process Exception: {} {}".format(e, tb_msg)
             with self.lock:
                 self.logger.error(msg)
