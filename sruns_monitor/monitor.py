@@ -345,7 +345,7 @@ class Monitor:
         """
         from_path = self.get_rundir_path(run_name)
         with self.lock:
-            self.logger.info("Moving run {run} to completed runs location {loc}.".format(run=run_name, loc=to_path))
+            self.logger.info("Moving run {run} to completed runs location {loc}.".format(run=run_name, loc=self.completed_runs_dir))
         shutil.move(from_path, self.completed_runs_dir)
 
     def process_new_run(self, run):
