@@ -344,7 +344,6 @@ class Monitor:
         Moves the run directory to the completed runs directory.
         """
         from_path = self.get_rundir_path(run_name)
-        to_path = os.path.join(self.completed_runs_dir, run_name)
         with self.lock:
             self.logger.info("Moving run {run} to completed runs location {loc}.".format(run=run_name, loc=to_path))
         shutil.move(from_path, to_path)
