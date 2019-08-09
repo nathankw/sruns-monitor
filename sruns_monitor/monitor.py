@@ -402,6 +402,7 @@ class Monitor:
             }
             self.logger.info("Firestore: Update run record {} with {}.".format(run_name, firestore_payload))
             firestore_conn.document(run_name).update(firestore_payload)
+        self.send_mail(subject="Finished processing run {}".format(run_name), body=run_name)
 
     def run_workflow(self, run_name):
         p = Process(target=self._workflow, args=(self.state, self.lock, run_name))

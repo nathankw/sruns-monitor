@@ -7,6 +7,7 @@
 ### 
 
 import logging
+from logging.handlers import RotatingFileHandler
 import os
 import sys
 
@@ -25,12 +26,13 @@ logger.addHandler(ch)
 
 def add_file_handler(logger, log_dir, level, tag):
     """
-    Adds a ``logging.FileHandler`` handler to the specified ``logging`` instance that will log
-    the messages it receives at the specified error level or greater.  The log file will be named
-    as outlined in ``get_logfile_name``.
+    Adds a ``logging.handlers.RotatingFileHandler`` handler to the specified ``logging`` instance 
+    that will log the messages it receives at the specified error level or greater.  The log file 
+    will be named as outlined in ``get_logfile_name``. The RotatingFileHandler is set to have
+    a max size of 1MB.
 
     Args:
-        logger: The `logging.Logger` instance to add the `logging.FileHandler` to.
+        logger: The `logging.Logger` instance to add the `RotatingFileHandler` to.
         log_dir: `str`. Directory in which to create the log file.
         level:  `int`. A logging level (i.e. given by one of the constants `logging.DEBUG`,
             `logging.INFO`, `logging.WARNING`, `logging.ERROR`, `logging.CRITICAL`).
@@ -39,7 +41,7 @@ def add_file_handler(logger, log_dir, level, tag):
     """
     filename = get_logfile_name(log_dir=log_dir,tag=tag)
     logger.info("Creating log file {}".format(os.path.abspath(filename)))
-    handler = logging.FileHandler(filename=filename, mode="a")
+    handler = RotatingFileHandler(filename=filename, mode="a", maxBytes=1000000000, backupCount=1)
     handler.setLevel(level)
     handler.setFormatter(FORMATTER)
     logger.addHandler(handler)
