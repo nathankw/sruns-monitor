@@ -14,7 +14,7 @@ def main():
     parser = get_parser()
     args = parser.parse_args()
     conf_file = args.conf_file
-    m = Monitor(conf_file=conf_file)
+    m = Monitor(conf_file=conf_file, verbose=True)
     m.start()
 
 if __name__ == "__main__":
