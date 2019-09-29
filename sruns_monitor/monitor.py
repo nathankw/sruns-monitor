@@ -52,10 +52,6 @@ class Monitor:
             verbose: `boolean`. True enables verbose logging. 
         """
         self.logger = logging.getLogger(__name__)
-        # Add debug file handler to self.logger:
-        srm.add_file_handler(logger=self.logger, log_dir=srm.LOG_DIR, level=logging.DEBUG, tag="debug")
-        # Add error file handler to self.logger:
-        srm.add_file_handler(logger=self.logger, log_dir=srm.LOG_DIR, level=logging.ERROR, tag="error")
         #: Stores the value passed during instantiation to the parameter by the same name. 
         self.verbose = verbose
         #: Stores the validated JSON configuration file as a dictionary. Any top-level keys in the

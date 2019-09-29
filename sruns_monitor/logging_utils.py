@@ -1,10 +1,10 @@
 # -*- coding: utf-8 -*-
 
-###                                                                                                    
-# Nathaniel Watson                                                                                     
-# nathanielwatson@stanfordhealthcare.org                                                               
-# 2019-05-31                                                                                           
-### 
+###
+# Nathaniel Watson
+# nathanielwatson@stanfordhealthcare.org
+# 2019-05-31
+###
 
 import logging
 from logging.handlers import RotatingFileHandler
@@ -16,18 +16,10 @@ import sruns_monitor as srm
 
 FORMATTER = logging.Formatter('%(asctime)s:%(name)s:%(levelname)s\t%(message)s')
 
-logger = logging.getLogger(__package__)
-logger.setLevel(logging.DEBUG)
-ch = logging.StreamHandler(stream=sys.stdout)
-ch.setLevel(logging.DEBUG)
-ch.setFormatter(FORMATTER)
-logger.addHandler(ch)
-
-
 def add_file_handler(logger, log_dir, level, tag):
     """
-    Adds a ``logging.handlers.RotatingFileHandler`` handler to the specified ``logging`` instance 
-    that will log the messages it receives at the specified error level or greater.  The log file 
+    Adds a ``logging.handlers.RotatingFileHandler`` handler to the specified ``logging`` instance
+    that will log the messages it receives at the specified error level or greater.  The log file
     will be named as outlined in ``get_logfile_name``. The RotatingFileHandler is set to have
     a max size of 1MB.
 
@@ -48,7 +40,7 @@ def add_file_handler(logger, log_dir, level, tag):
 
 def get_logfile_name(log_dir, tag):
     """
-    Creates a log file name that will reside in the directory specified by `log_dir`.  The file 
+    Creates a log file name that will reside in the directory specified by `log_dir`.  The file
     path will be '$log_dir/log_$TAG.txt', where $TAG is the value of the 'tag' parameter.
 
     Args:
@@ -59,3 +51,16 @@ def get_logfile_name(log_dir, tag):
     filename = "log_" + tag + ".txt"
     filename = os.path.join(log_dir, filename)
     return filename
+
+
+
+logger = logging.getLogger(__package__)
+logger.setLevel(logging.DEBUG)
+ch = logging.StreamHandler(stream=sys.stdout)
+ch.setLevel(logging.DEBUG)
+ch.setFormatter(FORMATTER)
+logger.addHandler(ch)
+# Add debug file handler to self.logger:
+add_file_handler(logger=self.logger, log_dir=srm.LOG_DIR, level=logging.DEBUG, tag="debug")
+# Add error file handler to self.logger:
+add_file_handler(logger=self.logger, log_dir=srm.LOG_DIR, level=logging.ERROR, tag="error")
