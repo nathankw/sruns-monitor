@@ -4,7 +4,7 @@ import logging
 import os
 import sys
 
-import logging_utils
+import sruns_monitor.logging_utils
 
 #: The log directory
 LOG_DIR = "Logs_" + __package__.capitalize()
