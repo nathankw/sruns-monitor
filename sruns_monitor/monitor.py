@@ -92,8 +92,6 @@ class Monitor:
         #: The main process will check this queue in each scan iteration to report any child processes
         #: that have failed by means of logging and email notification.
         self.state = Queue() # Must pass in manually to multiprocessing.Process constructors.
-        #: A lock for safeguarding access to logging streams.
-        self.lock = Lock() # Must pass in manually to multiprocessing.Process constructors
         #: The GCP Storage bucket name in which tarred run directories will be stored.
         self.bucket_name = self.conf[srm.C_GCP_BUCKET_NAME]
         #: The directory in the bucket in which to store tarred run directories. If not provided,
@@ -106,7 +104,7 @@ class Monitor:
         #: the configuration.
         self.sqlite_dbname = self.conf.get(srm.C_SQLITE_DB, "sruns.db")
         #: A `sqlite3.Connection` instance.
-        self.sqlite_conn = self.get_sqlite_conn(logging_lock=self.lock)
+        self.sqlite_conn = self.get_sqlite_conn()
 
 
     def get_firestore_conn(self):
@@ -114,18 +112,14 @@ class Monitor:
             return firestore.Client().collection(self.firestore_collection)
         return False
 
-    def get_sqlite_conn(self, logging_lock):
+    def get_sqlite_conn(self):
         """
         Creates a connection to the local SQLite database.
-
-        Args:
-            logging_lock: `multiprocessing.synchronize.Lock` instance for synchronizing access to
-                log streams.
 
         Returns:
             `sqlite3.Connection` instance that connects to `self.dbname`.
         """
-        return Db(dbname=self.sqlite_dbname, verbose=self.verbose, logging_lock=logging_lock)
+        return Db(dbname=self.sqlite_dbname, verbose=self.verbose)
 
     def _validate_conf(self, conf_file):
         """
@@ -175,8 +169,7 @@ class Monitor:
         """
         signame = signal.Signals(signum).name
         msg = "{} caught signal {}. Preparing for shutdown.".format(self.monitor_name, signame)
-        with self.lock:
-            self.logger.error(msg)
+        self.logger.error(msg)
         # Email notification
         self.send_mail(subject="Shutting down", body=msg)
         child_processes = psutil.Process().children()
@@ -185,7 +178,7 @@ class Monitor:
         self.sqlite_conn.close()
         sys.exit(128 + signum)
 
-    def _workflow(self, state, lock, run_name):
+    def _workflow(self, state, run_name):
         """
         Runs the workflow. Knows which stages to run, which is useful if the workflow needs to
         be rerun from a particular point.
@@ -197,12 +190,12 @@ class Monitor:
             state: `multiprocessing.Queue` instance.
             run_name: `str`. The name of a sequencing run.
         """
-        sl = self.get_sqlite_conn(logging_lock=lock)
+        sl = self.get_sqlite_conn()
         rec = sl.get_run(run_name)
         if not rec[Db.TASKS_TARFILE]:
-            self.task_tar(state=state, run_name=run_name, lock=lock, sqlite_conn=sl)
+            self.task_tar(state=state, run_name=run_name, sqlite_conn=sl)
         if not rec[Db.TASKS_GCP_TARFILE]:
-            self.task_upload(state=state, run_name=run_name, lock=lock, sqlite_conn=sl)
+            self.task_upload(state=state, run_name=run_name, sqlite_conn=sl)
         sl.conn.close()
 
     def firestore_update_status(self, run_name, status):
@@ -221,7 +214,7 @@ class Monitor:
         self.logger.info("Firestore: Set {} status to {}.".format(run_name, status))
         firestore_coll.document(run_name).update(firestore_payload)
 
-    def task_tar(self, state,  run_name, lock, sqlite_conn):
+    def task_tar(self, state,  run_name, sqlite_conn):
         """
         Creates a gzip tarfile of the run directory and updates the Firestore record's status to
         indicate that this task is running. The tarfile will be created in the calling directory
@@ -235,14 +228,12 @@ class Monitor:
         Args:
             state: `multiprocessing.Queue` instance.
             run_name: `str`. The name of a sequencing run.
-            lock: `multiprocessing.synchronize.Lock` instance to syncronize access to log streams.
             sqlite_conn: `sqlite3.Connection` instance for the local SQLite database.
         """
         try:
             sqlite_conn.update_run(name=run_name, payload={Db.TASKS_PID: os.getpid()})
             tarball_name = run_name + ".tar.gz"
-            with lock:
-                self.logger.info("Tarring sequencing run {}.".format(run_name))
+            self.logger.info("Tarring sequencing run {}.".format(run_name))
             # Update status of Firestore record
             self.firestore_update_status(run_name=run_name, status=Db.RUN_STATUS_TARRING)
             rec = sqlite_conn.get_run(run_name)
@@ -257,7 +248,7 @@ class Monitor:
             # any potential downstream loggers as well. This does not effect the main thread.
             raise
 
-    def task_upload(self, state, run_name, lock, sqlite_conn):
+    def task_upload(self, state, run_name, sqlite_conn):
         """
         Uploads the tarred run dirctory to GCP Storage in the directory specified by `self.bucket_basedir`.
         The Firestore record's status is also updated to indicate that this task is running.
@@ -275,7 +266,6 @@ class Monitor:
         Args:
             state: `multiprocessing.Queue` instance.
             run_name: `str`. The name of a sequencing run.
-            lock: `multiprocessing.synchronize.Lock` instance to syncronize access to log streams.
             sqlite_conn: `sqlite3.Connection` instance for the local SQLite database.
 
         Raises:
@@ -293,8 +283,7 @@ class Monitor:
             storage_client = storage.Client()
             # A `google.cloud.storage.bucket.Bucket` instance.
             bucket = storage_client.get_bucket(self.bucket_name)
-            with lock:
-                self.logger.info("Uploading {} to GCP Storage bucket {} as {}.".format(tarfile,self.bucket_name, blob_name))
+            self.logger.info("Uploading {} to GCP Storage bucket {} as {}.".format(tarfile,self.bucket_name, blob_name))
             # Update status of Firestore record
             self.firestore_update_status(run_name=run_name, status=Db.RUN_STATUS_UPLOADING)
             utils.upload_to_gcp(bucket=bucket, blob_name=blob_name, source_file=tarfile)
@@ -333,8 +322,7 @@ class Monitor:
         process = utils.get_process(pid)
         if process:
             if utils.running_too_long(process, self.process_runtime_limit_sec):
-                with self.lock:
-                    self.logger.info("Killing process {} for running too long".format(pid))
+                self.logger.info("Killing process {} for running too long".format(pid))
                 process.kill()
                 return True
                 # The next iteration of the monitor will see that the pid isn't running and restart
@@ -349,8 +337,7 @@ class Monitor:
         Moves the run directory to the completed runs directory.
         """
         from_path = self.get_rundir_path(run_name)
-        with self.lock:
-            self.logger.info("Moving run {run} to completed runs location {loc}.".format(run=run_name, loc=self.completed_runs_dir))
+        self.logger.info("Moving run {run} to completed runs location {loc}.".format(run=run_name, loc=self.completed_runs_dir))
         shutil.move(from_path, self.completed_runs_dir)
 
     def process_new_run(self, run):
@@ -409,7 +396,7 @@ class Monitor:
         self.send_mail(subject="Finished processing run {}".format(run_name), body=run_name)
 
     def run_workflow(self, run_name):
-        p = Process(target=self._workflow, args=(self.state, self.lock, run_name))
+        p = Process(target=self._workflow, args=(self.state, run_name))
         p.start()
 
     def scan(self):
@@ -440,8 +427,7 @@ class Monitor:
         """
         for run in runs:
             run_name = os.path.basename(run)
-            with self.lock:
-                self.logger.info("Processing rundir {}".format(run_name))
+            self.logger.info("Processing rundir {}".format(run_name))
             run_status = self.sqlite_conn.get_run_status(run_name)
             if run_status == Db.RUN_STATUS_NEW:
                 self.process_new_run(run)
@@ -453,8 +439,7 @@ class Monitor:
                 pid = rec[Db.TASKS_PID]
                 if self.kill_childprocess_if_running_to_long(pid):
                     msg = "Child process {} for run {} killed for running too long.".format(pid, run_name)
-                    with self.lock:
-                        self.logger.info(msg)
+                    self.logger.info(msg)
                     # Send email notification
                     self.send_mail(subject="Run {} killed".format(run_name), body=msg)
             elif run_status == Db.RUN_STATUS_NOT_RUNNING:
@@ -468,8 +453,7 @@ class Monitor:
         for run in os.listdir(self.completed_runs_dir):
             completed_run_path = os.path.join(self.completed_runs_dir, run)
             if utils.delete_directory_if_too_old(dirpath=completed_run_path, age_seconds=self.sweep_age_sec):
-                with self.lock:
-                    self.logger.info("Deleted completed run directory {}".format(completed_run_path))
+                self.logger.info("Deleted completed run directory {}".format(completed_run_path))
 
     def send_mail(self, subject, body):
         """
@@ -490,11 +474,10 @@ class Monitor:
         from_addr = mail_params["from"]
         host = mail_params["host"]
         tos = mail_params["tos"]
-        with self.lock:
-            self.logger.info("""
-                Sending mail
-                    Subject: {}
-                    Body: {}
+        self.logger.info("""
+            Sending mail
+            Subject: {}
+            Body: {}
             """.format(subject, body))
         utils.send_mail(from_addr=from_addr, to_addrs=tos, subject=subject, body=body, host=host)
 
@@ -527,9 +510,8 @@ class Monitor:
                     pid = child_process_msg[1]
                     err_msg = child_process_msg[2]
                     msg = "Run {} with process ID {} exited with message '{}'.".format(run_name, pid, err_msg)
-                    with self.lock:
-                        self.logger.error(msg)
-                        self.logger.info("Sending email notification")
+                    self.logger.error(msg)
+                    self.logger.info("Sending email notification")
                     self.send_mail(subject="Error for run {}".format(run_name), body=msg)
                 self.clean_completed_runs()
                 time.sleep(self.cycle_pause_sec)
@@ -537,8 +519,7 @@ class Monitor:
             tb = e.__traceback__
             tb_msg = pformat(traceback.extract_tb(tb).format())
             msg = "Main process Exception: {} {}".format(e, tb_msg)
-            with self.lock:
-                self.logger.error(msg)
+            self.logger.error(msg)
             self.send_mail(subject="Error", body=msg)
             raise
 

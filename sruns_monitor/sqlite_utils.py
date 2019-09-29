@@ -62,27 +62,18 @@ class Db:
     #: workflow is no longer running. For example, the tarfile task ran but the upload to GCP       
     #: task didn't because maybe it failed for some reason.                                         
     RUN_STATUS_NOT_RUNNING = "not_running" 
-    #: A `multiprocessing.synchronize.Lock` instance for synchronizing access to log streams.
-    #: Only used if class isn't instantiated with a lock passed in to the `loggin_lock` parameter.
-    LOGGING_LOCK = multiprocessing.Lock()
     #: A database lock for write access.
     DB_LOCK = multiprocessing.Lock()
 
     logger = logging.getLogger(__name__)
 
-    def __init__(self, dbname, logging_lock=False, verbose=True):
+    def __init__(self, dbname, verbose=True):
         """
         Args:
             dbname: `str`. Name of the local database file. If it doesn't end with a .db exention,
                 one will be added. 
-            logging_lock: `multiprocessing.synchronize.Lock` instance for synchronizing access to log streams. 
-                Will be set to `Db.LOGGING_LOCK` if not set. 
             verbose: `boolean`. True enables verbose logging. 
         """
-        if not logging_lock:
-            logging_lock = self.LOGGING_LOCK
-        #: A `multiprocessing.synchronize.Lock` instance for synchronizing access to log streams.
-        self.logging_lock = logging_lock
         #: If True, then verbose logging is enabled.
         self.verbose = verbose
         if not dbname.endswith(".db"):
@@ -113,8 +104,7 @@ class Db:
     def log(self, msg, verbose=False):
         if verbose and not self.verbose:
             return
-        with self.logging_lock:
-            self.logger.debug(msg)
+        self.logger.debug(msg)
 
     def get_run_status(self, name):
         """
