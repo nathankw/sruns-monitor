@@ -106,7 +106,7 @@ class Monitor:
         #: the configuration.
         self.sqlite_dbname = self.conf.get(srm.C_SQLITE_DB, "sruns.db")
         #: A `sqlite3.Connection` instance.
-        self.sqlite_conn = self.get_sqlite_conn()
+        self.sqlite_conn = self.get_sqlite_conn(logging_lock=self.lock)
 
 
     def get_firestore_conn(self):
@@ -114,14 +114,18 @@ class Monitor:
             return firestore.Client().collection(self.firestore_collection)
         return False
 
-    def get_sqlite_conn(self):
+    def get_sqlite_conn(self, logging_lock):
         """
         Creates a connection to the local SQLite database.
+
+        Args:
+            logging_lock: `multiprocessing.synchronize.Lock` instance for synchronizing access to
+                log streams.
 
         Returns:
             `sqlite3.Connection` instance that connects to `self.dbname`.
         """
-        return Db(dbname=self.sqlite_dbname, verbose=self.verbose, logging_lock=self.lock)
+        return Db(dbname=self.sqlite_dbname, verbose=self.verbose, logging_lock=logging_lock)
 
     def _validate_conf(self, conf_file):
         """
@@ -193,9 +197,10 @@ class Monitor:
             state: `multiprocessing.Queue` instance.
             run_name: `str`. The name of a sequencing run.
         """
+        sl = self.get_sqlite_conn(logging_lock=lock)
         rec = sl.get_run(run_name)
         if not rec[Db.TASKS_TARFILE]:
-            self.task_tar(state=state, run_name=run_name, lock=lock, sqlite_conn=self.sqlite_conn)
+            self.task_tar(state=state, run_name=run_name, lock=lock, sqlite_conn=sl)
         if not rec[Db.TASKS_GCP_TARFILE]:
             self.task_upload(state=state, run_name=run_name, lock=lock, sqlite_conn=sl)
         sl.conn.close()
