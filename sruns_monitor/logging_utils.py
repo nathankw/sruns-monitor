@@ -9,7 +9,6 @@
 import logging
 from logging.handlers import RotatingFileHandler
 import os
-import sys
 
 import sruns_monitor as srm
 
@@ -51,16 +50,3 @@ def get_logfile_name(log_dir, tag):
     filename = "log_" + tag + ".txt"
     filename = os.path.join(log_dir, filename)
     return filename
-
-
-
-logger = logging.getLogger(__package__)
-logger.setLevel(logging.DEBUG)
-ch = logging.StreamHandler(stream=sys.stdout)
-ch.setLevel(logging.DEBUG)
-ch.setFormatter(FORMATTER)
-logger.addHandler(ch)
-# Add debug file handler to self.logger:
-add_file_handler(logger=self.logger, log_dir=srm.LOG_DIR, level=logging.DEBUG, tag="debug")
-# Add error file handler to self.logger:
-add_file_handler(logger=self.logger, log_dir=srm.LOG_DIR, level=logging.ERROR, tag="error")

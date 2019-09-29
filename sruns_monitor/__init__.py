@@ -1,6 +1,8 @@
 # -*- coding: utf-8 -*-
 
+import logging
 import os
+import sys
 
 import logging_utils
 
@@ -15,10 +17,10 @@ ch = logging.StreamHandler(stream=sys.stdout)
 ch.setLevel(logging.DEBUG)
 ch.setFormatter(logging_utils.FORMATTER)
 logger.addHandler(ch)
-# Add debug file handler to self.logger:
-logging_utils.add_file_handler(logger=self.logger, log_dir=LOG_DIR, level=logging.DEBUG, tag="debug")
-# Add error file handler to self.logger:
-logging_utils.add_file_handler(logger=self.logger, log_dir=LOG_DIR, level=logging.ERROR, tag="error")
+# Add debug file handler to the logger:
+logging_utils.add_file_handler(logger=logger, log_dir=LOG_DIR, level=logging.DEBUG, tag="debug")
+# Add error file handler to the logger:
+logging_utils.add_file_handler(logger=logger, log_dir=LOG_DIR, level=logging.ERROR, tag="error")
 
 #: The JSON Schema file that defines the properties of the configuration file.
 CONF_SCHEMA = os.path.join(os.path.dirname(__file__), "schema.json")
