@@ -45,7 +45,7 @@ class Monitor:
     #: The sential file can vary by sequencing platform. For NovaSeq, can use CopyComplete.txt.
     SENTINAL_FILES = set(["CopyComplete.txt"])
 
-    def __init__(self, conf_file, verbose=False):
+    def __init__(self, conf_file, verbose=True):
         """
         Args:
             conf_file: `str`. Path to JSON configuration file.

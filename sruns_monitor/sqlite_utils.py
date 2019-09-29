@@ -70,7 +70,7 @@ class Db:
 
     logger = logging.getLogger(__name__)
 
-    def __init__(self, dbname, logging_lock=False, verbose=False):
+    def __init__(self, dbname, logging_lock=False, verbose=True):
         """
         Args:
             dbname: `str`. Name of the local database file. If it doesn't end with a .db exention,
