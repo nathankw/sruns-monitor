@@ -66,7 +66,7 @@ class Db:
     #: Only used if class isn't instantiated with a lock passed in to the `loggin_lock` parameter.
     LOGGING_LOCK = multiprocessing.Lock()
     #: A database lock for write access.
-    DB_LOCK = multiprocessing.lock()
+    DB_LOCK = multiprocessing.Lock()
 
     logger = logging.getLogger(__name__)
 

@@ -16,7 +16,7 @@ import json
 import os
 import unittest
 
-from sruns_monitor.tests import WATCH_DIR, TMP_DIR
+from sruns_monitor.tests import TMP_DIR
 from sruns_monitor.sqlite_utils import Db
 
 

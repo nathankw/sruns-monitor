@@ -21,7 +21,7 @@ import tarfile
 import time
 import unittest
 
-from sruns_monitor.tests import WATCH_DIR, TMP_DIR
+from sruns_monitor.tests import WATCH_DIRS, TMP_DIR
 from sruns_monitor import utils
 
 
@@ -31,7 +31,7 @@ class TestUtils(unittest.TestCase):
     """
 
     def setUp(self):
-        self.test_rundir = os.path.join(WATCH_DIR, "CompletedRun1")
+        self.test_rundir = os.path.join(WATCH_DIRS[0], "CompletedRun1")
         self.test_delete_dirname = os.path.join(TMP_DIR, "DeleteTestDir")
 
     def tearDown(self):
