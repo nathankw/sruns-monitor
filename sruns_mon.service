@@ -5,7 +5,7 @@ Documentation=https://pypi.org/project/sruns-monitor
 [Service]
 Type=simple
 ExecStartPre=/usr/bin/gcloud auth configure-docker
-ExecStart=/usr/bin/docker run --rm -w /tmp/smon -v /tmp/smon:/tmp/smon -v /mnt/sequencing/ssd/NovaSeq_A00731/:/mnt/sequencing/ssd/NovaSeq_A00731/ -v /mnt/sequencing/ssd/NovaSeq_A00737/:/mnt/sequencing/ssd/NovaSeq_A00737/ gcr.io/cgsdevelopment-1216/sruns-monitor@sha256:16fec7050133fcc280528ffc280c299b2827e4194a0103290904f7c2e983113e -c /tmp/smon/sruns_mon.conf
+ExecStart=/usr/bin/docker run --pid=host --rm -w /tmp/smon -v /tmp/smon:/tmp/smon -v /mnt/sequencing/ssd/NovaSeq_A00731/:/mnt/sequencing/ssd/NovaSeq_A00731/ -v /mnt/sequencing/ssd/NovaSeq_A00737/:/mnt/sequencing/ssd/NovaSeq_A00737/ gcr.io/cgsdevelopment-1216/sruns-monitor@sha256:16fec7050133fcc280528ffc280c299b2827e4194a0103290904f7c2e983113e -c /tmp/smon/sruns_mon.conf
 
 [Install]
 WantedBy=multi-user.target
