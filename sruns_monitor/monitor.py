@@ -105,8 +105,8 @@ class Monitor:
         #: The name of the local SQLite database.  Name defaults to sruns.db if not provided in
         #: the configuration.
         self.sqlite_dbname = self.conf.get(srm.C_SQLITE_DB, "sruns.db")
-        #: A `sqlite3.Connection` instance to be used by the main thread.
-        self.sqlite_conn_mainthread = self.get_sqlite_conn()
+        #: A `sqlite3.Connection` instance.
+        self.sqlite_conn = self.get_sqlite_conn()
 
 
     def get_firestore_conn(self):
@@ -121,7 +121,7 @@ class Monitor:
         Returns:
             `sqlite3.Connection` instance that connects to `self.dbname`.
         """
-        return Db(dbname=self.sqlite_dbname, verbose=self.verbose, lock=self.lock)
+        return Db(dbname=self.sqlite_dbname, verbose=self.verbose, logging_lock=self.lock)
 
     def _validate_conf(self, conf_file):
         """
@@ -178,7 +178,7 @@ class Monitor:
         child_processes = psutil.Process().children()
         # Kill child processes by sending a SIGKILL.
         [c.kill() for c in child_processes] # equiv. to os.kill(pid, signal.SIGKILL) on UNIX.
-        self.sqlite_conn_mainthread.conn.close()
+        self.sqlite_conn.close()
         sys.exit(128 + signum)
 
     def _workflow(self, state, lock, run_name):
@@ -193,10 +193,9 @@ class Monitor:
             state: `multiprocessing.Queue` instance.
             run_name: `str`. The name of a sequencing run.
         """
-        sl = self.get_sqlite_conn()
         rec = sl.get_run(run_name)
         if not rec[Db.TASKS_TARFILE]:
-            self.task_tar(state=state, run_name=run_name, lock=lock, sqlite_conn=sl)
+            self.task_tar(state=state, run_name=run_name, lock=lock, sqlite_conn=self.sqlite_conn)
         if not rec[Db.TASKS_GCP_TARFILE]:
             self.task_upload(state=state, run_name=run_name, lock=lock, sqlite_conn=sl)
         sl.conn.close()
@@ -337,7 +336,7 @@ class Monitor:
                 # the workflow if it hasn't finished yet.
 
     def get_rundir_path(self, run_name):
-        rec = self.sqlite_conn_mainthread.get_run(run_name)
+        rec = self.sqlite_conn.get_run(run_name)
         return rec[Db.TASKS_RUNDIR_PATH]
 
     def archive_run(self, run_name):
@@ -359,7 +358,7 @@ class Monitor:
         """
         run_name = os.path.basename(run)
         self.send_mail(subject="New run {}".format(run_name), body=run_name)
-        self.sqlite_conn_mainthread.insert_run(rundir_path=run)
+        self.sqlite_conn.insert_run(rundir_path=run)
         # Create Firestore document
         firestore_coll = self.get_firestore_conn()
         if firestore_coll:
@@ -390,7 +389,7 @@ class Monitor:
             archive: `boolean`. True meas to move the run directory to the completed runs location.
 
         """
-        rec = self.sqlite_conn_mainthread.get_run(run_name)
+        rec = self.sqlite_conn.get_run(run_name)
         if archive:
             self.archive_run(run_name)
         # Update Firestore record
@@ -438,14 +437,14 @@ class Monitor:
             run_name = os.path.basename(run)
             with self.lock:
                 self.logger.info("Processing rundir {}".format(run_name))
-            run_status = self.sqlite_conn_mainthread.get_run_status(run_name)
+            run_status = self.sqlite_conn.get_run_status(run_name)
             if run_status == Db.RUN_STATUS_NEW:
                 self.process_new_run(run)
             elif run_status == Db.RUN_STATUS_COMPLETE:
                 self.process_completed_run(run_name)
             elif run_status == Db.RUN_STATUS_RUNNING:
                 # Check if it has been running for too long.
-                rec = self.sqlite_conn_mainthread.get_run(run_name)
+                rec = self.sqlite_conn.get_run(run_name)
                 pid = rec[Db.TASK_PID]
                 if self.kill_childprocess_if_running_to_long(pid):
                     msg = "Child process {} for run {} killed for running too long.".format(pid, run_name)

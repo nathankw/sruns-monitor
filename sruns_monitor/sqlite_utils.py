@@ -62,21 +62,27 @@ class Db:
     #: workflow is no longer running. For example, the tarfile task ran but the upload to GCP       
     #: task didn't because maybe it failed for some reason.                                         
     RUN_STATUS_NOT_RUNNING = "not_running" 
+    #: A `multiprocessing.synchronize.Lock` instance for synchronizing access to log streams.
+    #: Only used if class isn't instantiated with a lock passed in to the `loggin_lock` parameter.
+    LOGGING_LOCK = multiprocessing.Lock()
+    #: A database lock for write access.
+    DB_LOCK = multiprocessing.lock()
 
     logger = logging.getLogger(__name__)
 
-    def __init__(self, dbname, lock=False, verbose=False):
+    def __init__(self, dbname, logging_lock=False, verbose=False):
         """
         Args:
             dbname: `str`. Name of the local database file. If it doesn't end with a .db exention,
                 one will be added. 
-            lock: `multiprocessing.synchronize.Lock` instance for synchronizing access to log streams. 
+            logging_lock: `multiprocessing.synchronize.Lock` instance for synchronizing access to log streams. 
+                Will be set to `Db.LOGGING_LOCK` if not set. 
             verbose: `boolean`. True enables verbose logging. 
         """
-        if not lock:
-            lock = multiprocessing.Lock()
+        if not logging_lock:
+            logging_lock = self.LOGGING_LOCK
         #: A `multiprocessing.synchronize.Lock` instance for synchronizing access to log streams.
-        self.lock = lock
+        self.logging_lock = logging_lock
         #: If True, then verbose logging is enabled.
         self.verbose = verbose
         if not dbname.endswith(".db"):
@@ -100,13 +106,14 @@ class Db:
                        tarfile=self.TASKS_TARFILE,
                        gcp_tarfile=self.TASKS_GCP_TARFILE,
                        rundir_path=self.TASKS_RUNDIR_PATH)
-        with self.conn as conn:
-            conn.execute(create_table_sql)
+        with self.DB_LOCK:
+            with self.conn as conn:
+                conn.execute(create_table_sql)
 
     def log(self, msg, verbose=False):
         if verbose and not self.verbose:
             return
-        with self.lock:
+        with self.logging_lock:
             self.logger.debug(msg)
 
     def get_run_status(self, name):
@@ -173,8 +180,9 @@ class Db:
                   gcp_tarfile=gcp_tarfile,
                   rundir_path=rundir_path)
         self.log(msg=sql, verbose=True)
-        with self.conn as conn:
-            conn.execute(sql) # Returns the sqlite3.Cursor object. 
+        with self.DB_LOCK:
+            with self.conn as conn:
+                conn.execute(sql) # Returns the sqlite3.Cursor object. 
 
     def update_run(self, name, payload):
         update_str = ""
@@ -187,8 +195,9 @@ class Db:
             updates=update_str,
             name=name)
         self.log(msg=sql, verbose=True)
-        with self.conn as conn:
-            conn.execute(sql)
+        with self.DB_LOCK:
+            with self.conn as conn:
+                conn.execute(sql)
               
     def get_run(self, name):
         """
@@ -224,8 +233,9 @@ class Db:
             input_name=name)
         self.log(msg=sql, verbose=True)
 
-        with self.conn as conn:
-            conn.execute(sql)
+        with self.DB_LOCK:
+            with self.conn as conn:
+                conn.execute(sql)
 
     def get_tables(self):
         sql = "SELECT name FROM sqlite_master where type='table';"
