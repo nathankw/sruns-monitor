@@ -450,7 +450,7 @@ class Monitor:
             elif run_status == Db.RUN_STATUS_RUNNING:
                 # Check if it has been running for too long.
                 rec = self.sqlite_conn.get_run(run_name)
-                pid = rec[Db.TASK_PID]
+                pid = rec[Db.TASKS_PID]
                 if self.kill_childprocess_if_running_to_long(pid):
                     msg = "Child process {} for run {} killed for running too long.".format(pid, run_name)
                     with self.lock:
