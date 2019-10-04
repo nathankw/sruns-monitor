@@ -228,7 +228,7 @@ class Monitor:
         """
         try:
             sqlite_conn.update_run(name=run_name, payload={Db.TASKS_PID: os.getpid()})
-            tarball_name = run_name + ".tar.gz"
+            tarball_name = run_name + ".tar"
             self.logger.info("Tarring sequencing run {}.".format(run_name))
             # Update status of Firestore record
             self.firestore_update_status(run_name=run_name, status=Db.RUN_STATUS_TARRING)
