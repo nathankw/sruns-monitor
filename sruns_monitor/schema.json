@@ -72,6 +72,6 @@
         }
     },
     "additionalProperties": false,
-    "required": ["completed_runs_dir", "name", "gcp_bucket_name", "completed_runs_dir"]
+    "required": ["name", "gcp_bucket_name", "completed_runs_dir"]
 }
 
