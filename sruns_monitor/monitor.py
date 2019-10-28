@@ -62,7 +62,7 @@ class Monitor:
         self.monitor_name = self.conf[srm.C_MONITOR_NAME]
         #: The name of the Firestore collection to use. If not provided in configuration, will be
         #: None.
-        self.firestore_collection = self.conf.get("firestore_collection")
+        self.firestore_collection = self.conf.get(srm.C_FIRESTORE_COLLECTION)
         if not self.firestore_collection:
             self.logger.warn("Firestore not enabled.")
 
@@ -71,7 +71,10 @@ class Monitor:
         for path in self.watchdirs:
             if not os.path.exists(path):
                 raise ConfigException("'watchdirs' is a required property and the referenced directory must exist.".format(path))
-        self.completed_runs_dir = "SRM_COMPLETED"
+        #: The path to which processed runs will be moved to (last step of workflow). Run directories
+        #: here are subjected to removal after a configurable amount of time; see the sweep_age_sec 
+        #: config parameter. 
+        self.completed_runs_dir = self.conf[srm.C_COMPLETED_RUNS_DIR]
         if not os.path.exists(self.completed_runs_dir):
             os.mkdir(self.completed_runs_dir)
 

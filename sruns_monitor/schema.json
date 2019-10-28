@@ -24,6 +24,10 @@
             "additionalProperties": false,
             "required": ["from", "host", "tos"]
         },
+        "completed_runs_dir": {
+            "description": "The location of the completed runs directory",
+            "type": "string"
+        },
         "name": {
             "description": "The name of the monitor. The name will appear in the subject line if email notification is configured, as well as in other places, i.e. log messages.",
             "type": "string"
@@ -68,6 +72,6 @@
         }
     },
     "additionalProperties": false,
-    "required": ["name", "watchdirs", "gcp_bucket_name"]
+    "required": ["completed_runs_dir", "name", "gcp_bucket_name", "completed_runs_dir"]
 }
 
