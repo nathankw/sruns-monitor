@@ -81,6 +81,11 @@ collection to use, for example. The possible keys are:
     Defaults to the root directory.
   * `gcp_bucket_name`: (Required) The name of the Google Cloud Storage bucket to which tarred run
     directories will be uploaded.
+  * `sentinal_file_age_minutes`: How old in minutes the sentinal file, i.e. CopyComplete.txt, should 
+    be before initiating any tasks, such as tarring the run directory. Illumina Support recommends 
+    15 minutes, which is thus the default. This helps to ensure that the Illumina Universal Copy 
+    Services (UCS) running on the sequencer has had ample time to complete once the sentinal file 
+    appears.
   * `sqlite_db`: The name of the local SQLite database to use for tracking workflow state.
     Defaults to *sruns.db* if not specified.
   * `sweep_age_sec`: When a run in the completed runs directory is older than this many seconds, 

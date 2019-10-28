@@ -101,6 +101,25 @@ def get_file_age(filepath):
     file_mtime = os.path.getmtime(filepath)
     return now - file_mtime
 
+def get_ctime_minus_mtime(filepath):
+    """
+    Gets the differences, in minutes, of the specified file's inode change time (ctime, for 
+    metadata modification) minus its modification time (mtime). This is useful for determinig how
+    long a file as been copied over to NFS since the mtime and atime timestamps are preservered from
+    the copy source. 
+
+    Returns:
+        `float`:  The files mtime - ctime, converted to minutes. Note that this number will be
+            negative if the file was modified after having been copied over to NFS, in which case 
+            Infinity, float("inf"), is returned. 
+    """
+    ctime = os.path.getctime(filepath)
+    mtime = os.path.getmtime(filepath)
+    diff_minutes = (ctime - mtime)/60
+    if diff_minutes < 0:
+        diff_minutes = float("inf")
+    return diff_minutes
+
 def delete_directory_if_too_old(dirpath, age_seconds):
     """
     Removes the directory if it hasn't been modified  since the specified number of seconds.

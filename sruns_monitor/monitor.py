@@ -74,6 +74,11 @@ class Monitor:
         self.completed_runs_dir = "SRM_COMPLETED"
         if not os.path.exists(self.completed_runs_dir):
             os.mkdir(self.completed_runs_dir)
+
+        #: How old in minutes the sentinal file, i.e. CopyComplete.txt, should be before initiating
+        #: any tasks, such as tarring the run directory. Illumina Support recommends 15 minutes, which
+        #: is thus the default. 
+        self.sentinal_file_age_minutes = self.conf.get(srm.C_SENTINAL_FILE_AGE_MINUTES, 15)
         #: When a run in the completed runs directory is older than this many seconds, remove it.
         #: If not specified in configuration file, defaults to 604800 (1 week).
         self.sweep_age_sec = self.conf.get(srm.C_SWEEP_AGE_SEC, 604800)
@@ -338,12 +343,31 @@ class Monitor:
 
     def process_new_run(self, run):
         """
-        Create a new record into the local sqlite db as well as the Firestore db.
+        Creates a new record into the local sqlite db as well as the Firestore db.
         If mail is configured, sends an email notification about the new run first. 
+        Then, initiates the workflow. 
+
+        Before any of this happens, however, there is a check to ensure that the Illumina 
+        Universal Copy Services (UCS) has had ample time to complete once the sentinal file appears
+        in the output folder. Illumina Support recommends that this be 15 minutes, but this is 
+        configurable in this program's JSON config file. 
 
         Args:
             run: `str`. Path to a run directory.
         """
+        # Make sure that the sentinal file, i.e. CopyComplete.txt, is at least self.sentinal_file_age_minutes
+        # old prior to processing:
+        minutes_old = 0
+        for sentinal_file_name in self.SENTINAL_FILES:
+            sentinal_file_path = s.path.join(run, sentinal_file_name)
+            if os.path.exists(sentinal_file_path):
+                # One of the sentinal files will exist at this point in the program, otherwise this
+                # method would never have been called. 
+                minutes_old = utils.get_ctime_minus_mtime(sentinal_file_path):
+                break
+        if not minutes_old > self.sentinal_file_age_minutes:
+            self.logger.info("The sentinal file for run {} should be at least {} minutes old before processing starts. Will try again on next smon iteration".format(run, self.sentinal_file_age_minutes))
+            return
         run_name = os.path.basename(run)
         self.send_mail(subject="New run {}".format(run_name), body=run_name)
         self.sqlite_conn.insert_run(rundir_path=run)
