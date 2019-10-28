@@ -54,6 +54,10 @@
             "description": "The parent folder in the Google Storage bucket under which all files will be written",
             "type": "string"
         },
+        "sentinal_file_age_minutes": {
+            "description": "How old in minutes the sentinal file, i.e. CopyComplete.txt, should be before initiating any tasks, such as tarring the run directory",
+            "type": "integer"
+        },
         "sqlite_db": {
             "description": "The name of the local SQLite database for tracking local workflow state",
             "type": "string"
