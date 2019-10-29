@@ -366,7 +366,7 @@ class Monitor:
             if os.path.exists(sentinal_file_path):
                 # One of the sentinal files will exist at this point in the program, otherwise this
                 # method would never have been called. 
-                minutes_old = utils.get_ctime_minus_mtime(sentinal_file_path)
+                minutes_old = utils.get_time_since_ctime(sentinal_file_path)
                 break
         if not minutes_old > self.sentinal_file_age_minutes:
             self.logger.info("The sentinal file for run {} should be at least {} minutes old before processing starts. Will try again on next smon iteration".format(run, self.sentinal_file_age_minutes))
