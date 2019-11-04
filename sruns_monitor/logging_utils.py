@@ -10,8 +10,6 @@ import logging
 from logging.handlers import RotatingFileHandler
 import os
 
-import sruns_monitor as srm
-
 
 FORMATTER = logging.Formatter('%(asctime)s:%(name)s:%(levelname)s\t%(message)s')
 
