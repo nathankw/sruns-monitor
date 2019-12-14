@@ -505,8 +505,6 @@ class Monitor:
         utils.send_mail(from_addr=from_addr, to_addrs=tos, subject=subject, body=body, host=host)
 
     def start(self):
-        self.logger.debug("Work dir")
-        self.logger.debug(os.getcwd())
         cycle_num = 0
         try:
             while True:

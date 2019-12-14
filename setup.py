@@ -61,5 +61,5 @@ setup(
   },
   scripts = scripts,
   url = "https://pypi.org/project/sruns-monitor/",
-  version = "0.8.1"
+  version = "0.8.3"
 )

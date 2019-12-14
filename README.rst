@@ -89,6 +89,7 @@ collection to use, for example. The possible keys are:
   * `sqlite_db`: The name of the local SQLite database to use for tracking workflow state.
     Defaults to *sruns.db* if not specified.
   * `sweep_age_sec`: When a run in the completed runs directory is older than this many seconds, 
+    remove it. Defaults to 604800 (1 week).
   * `task_runtime_limit_sec`: The number of seconds a child process is allowed to run before
     being killed. This is meant to serve as a safety mechanism to prevent errant child processes
     from consuming resources in the event that this does happen due to unforeseen circumstances.
@@ -97,7 +98,6 @@ collection to use, for example. The possible keys are:
     on several factors, such as run size and network speed. It is suggested to use two days (172800
     seconds) at least to be conservative.
   * `watchdir`: (Required) The directory to monitor for new sequencing runs.
-    remove it. Defaults to 604800 (1 week).
 
 The user-supplied configuration file is validated in the Monitor agains a built-in schema. 
 
