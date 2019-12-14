@@ -362,7 +362,7 @@ class Monitor:
         # old prior to processing:
         minutes_old = 0
         for sentinal_file_name in self.SENTINAL_FILES:
-            sentinal_file_path = s.path.join(run, sentinal_file_name)
+            sentinal_file_path = os.path.join(run, sentinal_file_name)
             if os.path.exists(sentinal_file_path):
                 # One of the sentinal files will exist at this point in the program, otherwise this
                 # method would never have been called. 
