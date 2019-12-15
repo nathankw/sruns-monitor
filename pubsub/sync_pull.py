@@ -31,8 +31,8 @@ class Poll:
             run_name: `str`. The name of the sequencing run at hand. Used to query Firestore for a
                 document having the 'name' attribute set to this. 
 
-        Returns:  `google.cloud.firestore_v1.document.DocumentReference` if a document exists.
-                  `None` if no such document exists. 
+        Returns:  `dict` if such a document exists in the Firestore collection.
+                  `None` if no such document exists in the Firestore collection.
         """
         return self.firestore_coll.document(run_name).get().to_dict()
 
@@ -73,7 +73,7 @@ class Poll:
         msg = rcv_msg.message
         #: msg.data is a `bytes` object. 
         jdata = json.loads(msg.message.data)
-        print(json.dumps(jdata, indent=4))
+        return jdata
 
     def pull(self):
         try:
@@ -86,7 +86,17 @@ class Poll:
         for received_message in response.received_messages:
             # Get JSON form of data
             jdata = get_msg_data(received_message)
+            run_name = jdata[srm.FIRESTORE_ATTR_RUN_NAME].split(".")[0]
             # Query Firestore for the run metadata to grab the location in Google Storage of the raw run.
+            print(f"Querying Firestore for a document with name '{run_name}'"
+            #: 
+            doc = self.get_firestore_document(run_name=run_name)
+            # Get path to raw run data in Google Storeage
+            raw_run_path = doc.get(srm.FIRESTORE_ATTR_STORAGE)
+            if not raw_run_path:
+                msg = f"Firestore document '{run_name}' doesn't have the storeage path attribute '{srm.FIRESTORE_ATTR_STORAGE}' set!"
+                msg += f" Did the sequencing run finish uploading to Google Storeage yet?"
+                raise Exception(msg)
             ack_ids.append(received_message.ack_id)
     
         # Acknowledges the received messages so they will not be sent again.
