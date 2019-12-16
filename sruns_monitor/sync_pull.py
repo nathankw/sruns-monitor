@@ -144,10 +144,9 @@ class Poll:
             # Download raw run data
             download_dir = os.path.join(self.basedir, run_name, jdata["metageneration"])
             raw_data_path = self.download(bucket=self.run_dir_bucket, object_path=raw_run_path, download_dir=download_dir)
-            # extract tarball
-            # Download SampleSheet
             ss_bucket = self.get_bucket(jdata["bucket"])
             samplesheet_path = self.download(bucket=ss_bucket, object_path=jdata["name"], download_dir=download_dir)
+            # extract tarball
 
             ack_ids.append(received_message.ack_id)
     
