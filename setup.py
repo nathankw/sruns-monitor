@@ -43,6 +43,7 @@ setup(
   keywords = "archive sequencing runs monitor",
   install_requires = [
     "docutils",
+    "google-cloud-pubsub",
     "google-cloud-firestore",
     "google-cloud-storage",
     "jsonschema",

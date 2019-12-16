@@ -9,8 +9,6 @@ import shutil
 import tarfile
 import time
 
-import pdb
-
 import sruns_monitor as srm
 
 
@@ -56,6 +54,18 @@ def tar(input_dir, tarball_name, compress=False):
         mode = "w:gz"
     with tarfile.open(tarball_name, mode=mode) as tb:
         tb.add(name=input_dir, arcname=os.path.basename(input_dir))
+
+def extract(filename, where):
+   """
+   Extracts a tar file.
+
+   Args:
+       filename: `str`. Local filepath of the file to extract.
+       where: `str`. The local directory path in which `filename` will be extracted. 
+  
+   """
+   tf = tarfile.open(filename)
+   tf.extractall(path=where)
 
 def upload_to_gcp(bucket, blob_name, source_file):
     """
