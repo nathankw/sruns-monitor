@@ -76,3 +76,6 @@ FIRESTORE_ATTR_WF_STATUS = "workflow_status"
 
 #: Bucket storage object path for the tarred run directory in the form bucket_name/path/to/run.tar.gz.
 FIRESTORE_ATTR_STORAGE = "storage"
+
+#:
+FIRESTORE_ATTR_SS_PUBSUB_DATA = "samplesheet_pubsub_data"

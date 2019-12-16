@@ -56,7 +56,7 @@ class Monitor:
         self.verbose = verbose
         #: Stores the validated JSON configuration file as a dictionary. Any top-level keys in the
         #: JSON file that were commented out (start with a '#') are not present here. 
-        self.conf = self._validate_conf(conf_file)
+        self.conf = utils.validate_conf(conf_file)
         #: The name of the monitor. The name will appear in the subject line if email notification
         #: is configured, as well as in other places, i.e. log messages.
         self.monitor_name = self.conf[srm.C_MONITOR_NAME]
@@ -124,27 +124,6 @@ class Monitor:
             `sqlite3.Connection` instance that connects to `self.dbname`.
         """
         return Db(dbname=self.sqlite_dbname, verbose=self.verbose)
-
-    def _validate_conf(self, conf_file):
-        """
-        Ensures that the configuration file is valid according to the internal schema. Before
-        validating, any keys that start with '#' will be removed from the JSON object.
-
-        Args:
-            conf_file: `str`. The JSON configuration file.
-        """
-        conf_fh = open(conf_file)
-        jconf = json.load(conf_fh)
-        conf_fh.close()
-        # Remove any keys that have been commented out
-        for key in list(jconf.keys()):
-            if key.startswith("#"):
-                jconf.pop(key)
-        schema_fh = open(srm.CONF_SCHEMA)
-        jschema = json.load(schema_fh)
-        schema_fh.close()
-        jsonschema.validate(jconf, jschema)
-        return jconf
 
     def get_mail_params(self):
         return self.conf.get(srm.C_MAIL)

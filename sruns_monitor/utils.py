@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 
 from email.message import EmailMessage
+import json
 import os
 import psutil
 from smtplib import SMTP, SMTPException
@@ -13,6 +14,28 @@ import pdb
 import sruns_monitor as srm
 
 
+def validate_conf(conf_file):
+    """
+    Ensures that the configuration file is valid according to the internal schema. Before
+    validating, any keys that start with '#' will be removed from the JSON object.
+
+    Args:
+        conf_file: `str`. The JSON configuration file.
+    """
+    conf_fh = open(conf_file)
+    jconf = json.load(conf_fh)
+    conf_fh.close()
+    # Remove any keys that have been commented out
+    for key in list(jconf.keys()):
+        if key.startswith("#"):
+            jconf.pop(key)
+    schema_fh = open(srm.CONF_SCHEMA)
+    jschema = json.load(schema_fh)
+    schema_fh.close()
+    jsonschema.validate(jconf, jschema)
+    return jconf
+
+
 def tar(input_dir, tarball_name, compress=False):
     """
     Creates a tar.gz tarball of the provided directory and returns the tarball's name.
@@ -22,7 +45,7 @@ def tar(input_dir, tarball_name, compress=False):
         input_dir: `str`. Path to the directory to tar up.
         tarball_name: `str`. Name of the output tarball.
         compress: `boolean`. True enables gzip compression. Not recommended with the latest types of
-            Illumina runs, i.e. NovaSeq, since the files are mostly binary which isn't compressible. 
+            Illumina runs, i.e. NovaSeq, since the files are mostly binary which isn't compressible.
             For example, I compressed a 428 GB NovaSeq run with 'tar -zcf' and the output was 422 GB.
 
     Returns:
@@ -104,11 +127,11 @@ def get_file_age(filepath):
 
 def get_time_since_ctime(filepath):
     """
-    Gets the difference, in minutes, of the current time minus the specified file's inode change 
-    time (ctime, for metadata modification). This is useful for determinig how long a file as been 
+    Gets the difference, in minutes, of the current time minus the specified file's inode change
+    time (ctime, for metadata modification). This is useful for determinig how long a file as been
     copied over to NFS since - the mtime and atime timestamps are preservered from the copy source,
-    but the ctime in this sense reveals when the file was copied to NFS since the file permissions 
-    changed at that point in time. 
+    but the ctime in this sense reveals when the file was copied to NFS since the file permissions
+    changed at that point in time.
 
     Returns:
         `float`.

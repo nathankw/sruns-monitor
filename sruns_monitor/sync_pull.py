@@ -22,10 +22,30 @@ class Poll:
 
     def __init__(self, project_id, subscription_name, conf_file):
         self.conf = utils.validate_conf(conf_file)   
+        self.basedir = "demultiplexing"
         self.subscriber = pubsub_v1.SubscriberClient()
         self.subscription_path = subscriber.subscription_path(self.project_id, self.subscription_name)
         self.firestore_collection_name = self.conf.get(srm.C_FIRESTORE_COLLECTION)
         self.firestore_coll = firestore.Client().collection(self.firestore_collection_name)
+        self.run_dir_bucket = self.get_bucket(self.conf[srm.C_GCP_BUCKET_NAME])
+
+    def get_bucket(self, bucket_name)
+        client = storage.Client()
+        return bucket = client.get_bucket(self.bucket_name)
+
+    def download(self, bucket, object_path, download_dir)
+        """
+        Downloads the specified object from the specified bucket in `download_dir`.
+
+        Args:
+            bucket: `google.cloud.storage.bucket.Bucket` instance (i.e. from `self.get_bucket`).
+            object_path: `str`. The object path within `bucket` to download. 
+            download_dir: `str`. Directory in which to download the file. 
+        """
+        blob = bucket.get_blob(object_path)
+        filename = os.path.join(download_dir, os.path.basename(object_path))
+        blob.download_to_filename(filename)
+        return filename
 
     def get_firestore_document(self, run_name):
         """
@@ -87,7 +107,7 @@ class Poll:
         ack_ids = []
         for received_message in response.received_messages:
             # Get JSON form of data
-            jdata = get_msg_data(received_message)
+            jdata = self.get_msg_data(received_message)
             run_name = jdata[srm.FIRESTORE_ATTR_RUN_NAME].split(".")[0]
             # Query Firestore for the run metadata to grab the location in Google Storage of the raw run.
             print(f"Querying Firestore for a document with name '{run_name}'"
@@ -97,13 +117,15 @@ class Poll:
             if not doc:
                 msg = f"No Firestore document exists for run '{run_name}'."
                 raise Exception(msg)
-            
-            # Get path to raw run data in Google Storeage
+            # Get path to raw run data in Google Storage. Has bucket name as prefix, i.e.
+            # mybucket/path/to/obj
             raw_run_path = doc.get(srm.FIRESTORE_ATTR_STORAGE)
             if not raw_run_path:
                 msg = f"Firestore document '{run_name}' doesn't have the storeage path attribute '{srm.FIRESTORE_ATTR_STORAGE}' set!"
                 msg += f" Did the sequencing run finish uploading to Google Storeage yet?"
                 raise Exception(msg)
+            # Strip off bucket name
+            raw_run_path = raw_run_path.split("/", 1)[1]
             samplesheet_pubsub_data = jdata.get(srm.FIRESTORE_ATTR_SS_PUBSUB_DATA)
             if not samplesheet_pubsub_data:
                 docref.set({srm.samplesheet_pubsub_data: jdata})
@@ -120,7 +142,12 @@ class Poll:
                     # Overwrite previous value for srm.FIRESTORE_ATTR_SS_PUBSUB_DATA
                     docref.set({srm.samplesheet_pubsub_data: jdata})
             # Download raw run data
-            raw_data_path = self.download_raw_run(self, jdata["metageneration"])
+            download_dir = os.path.join(self.basedir, run_name, jdata["metageneration"])
+            raw_data_path = self.download(bucket=self.run_dir_bucket, object_path=raw_run_path, download_dir=download_dir)
+            # extract tarball
+            # Download SampleSheet
+            ss_bucket = self.get_bucket(jdata["bucket"])
+            samplesheet_path = self.download(bucket=ss_bucket, object_path=jdata["name"], download_dir=download_dir)
 
             ack_ids.append(received_message.ack_id)
     
