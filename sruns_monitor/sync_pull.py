@@ -2,6 +2,8 @@ import argparse
 import json
 import time
 
+import sruns_monitor as srm
+
 from google.cloud import firestore
 from google.cloud import pubsub_v1
 from google.cloud import storage
@@ -31,10 +33,10 @@ class Poll:
             run_name: `str`. The name of the sequencing run at hand. Used to query Firestore for a
                 document having the 'name' attribute set to this. 
 
-        Returns:  `dict` if such a document exists in the Firestore collection.
-                  `None` if no such document exists in the Firestore collection.
+        Returns: `google.cloud.firestore_v1.document.DocumentReference`
         """
-        return self.firestore_coll.document(run_name).get().to_dict()
+        
+        return self.firestore_coll.document(run_name)
 
     def get_msg_data(self, rcv_msg):
         """
@@ -89,14 +91,37 @@ class Poll:
             run_name = jdata[srm.FIRESTORE_ATTR_RUN_NAME].split(".")[0]
             # Query Firestore for the run metadata to grab the location in Google Storage of the raw run.
             print(f"Querying Firestore for a document with name '{run_name}'"
-            #: 
-            doc = self.get_firestore_document(run_name=run_name)
+            #: doc is a `google.cloud.firestore_v1.document.DocumentReference` object.
+            docref = self.get_firestore_document(run_name=run_name)
+            doc = docref.get().to_dict() # dict
+            if not doc:
+                msg = f"No Firestore document exists for run '{run_name}'."
+                raise Exception(msg)
+            
             # Get path to raw run data in Google Storeage
             raw_run_path = doc.get(srm.FIRESTORE_ATTR_STORAGE)
             if not raw_run_path:
                 msg = f"Firestore document '{run_name}' doesn't have the storeage path attribute '{srm.FIRESTORE_ATTR_STORAGE}' set!"
                 msg += f" Did the sequencing run finish uploading to Google Storeage yet?"
                 raise Exception(msg)
+            samplesheet_pubsub_data = jdata.get(srm.FIRESTORE_ATTR_SS_PUBSUB_DATA)
+            if not samplesheet_pubsub_data:
+                docref.set({srm.samplesheet_pubsub_data: jdata})
+            else:
+                # Check if metageneration number is the same. 
+                # If same, then we got a duplicate message from pubsub and can ignore. But if
+                # different, then the SampleSheet was re-uploaded and we should process it again
+                # (i.e. maybe the original SampleSheet had an incorrect barcode assignment). 
+                prev_meta_gen = samplesheet_pubsub_data["metageneration"]
+                if meta_gen == jdata["metageneration"]:
+                    # duplicate message sent. Rare, but possible occurrence. 
+                    return
+                else:
+                    # Overwrite previous value for srm.FIRESTORE_ATTR_SS_PUBSUB_DATA
+                    docref.set({srm.samplesheet_pubsub_data: jdata})
+            # Download raw run data
+            raw_data_path = self.download_raw_run(self, jdata["metageneration"])
+
             ack_ids.append(received_message.ack_id)
     
         # Acknowledges the received messages so they will not be sent again.
