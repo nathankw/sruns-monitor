@@ -1,5 +1,6 @@
 import argparse
 import json
+import os
 import time
 
 import sruns_monitor as srm
@@ -23,6 +24,8 @@ class Poll:
     def __init__(self, project_id, subscription_name, conf_file):
         self.conf = utils.validate_conf(conf_file)   
         self.basedir = "demultiplexing"
+        if not os.path.exists(self.basedir):
+            os.makedirs(self.basedir)
         self.subscriber = pubsub_v1.SubscriberClient()
         self.subscription_path = subscriber.subscription_path(self.project_id, self.subscription_name)
         self.firestore_collection_name = self.conf.get(srm.C_FIRESTORE_COLLECTION)
@@ -42,6 +45,8 @@ class Poll:
             object_path: `str`. The object path within `bucket` to download. 
             download_dir: `str`. Directory in which to download the file. 
         """
+        if not os.path.exists(download_dir):
+            os.makedirs(download_dir)
         blob = bucket.get_blob(object_path)
         filename = os.path.join(download_dir, os.path.basename(object_path))
         blob.download_to_filename(filename)
