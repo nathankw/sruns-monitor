@@ -7,7 +7,6 @@
 ###
 
 import json
-import jsonschema
 import logging
 from multiprocessing import Process, Queue, Lock
 import os

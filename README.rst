@@ -35,7 +35,7 @@ the workflow is running.
 
 Mail notifications
 ------------------
-If the 'mail' JSON object is set in your configuraiton file, then the designated recipients will
+If the 'mail' JSON object is set in your configuration file, then the designated recipients will
 receive email notifications under the folowing events:
 
   * A child process running a workflow crashes

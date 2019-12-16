@@ -2,6 +2,7 @@
 
 from email.message import EmailMessage
 import json
+import jsonschema
 import os
 import psutil
 from smtplib import SMTP, SMTPException

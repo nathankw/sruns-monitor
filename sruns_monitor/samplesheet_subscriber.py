@@ -2,6 +2,7 @@ import argparse
 import json
 import logging
 import os
+import sys
 import time
 
 import sruns_monitor as srm
@@ -24,8 +25,35 @@ GCP documentation for synchronous pull at https://cloud.google.com/pubsub/docs/p
 
 class Poll:
 
-    def __init__(self, project_id, subscription_name, conf_file):
-        self.logger = logging.getLogger("SampleSheetSubscriber")
+    def __init__(self, subscription_name, conf_file, gcp_project_id=""):
+        """
+        Args:
+            gcp_project_id: `str`. The ID of the GCP project. If left blank, it will be extracted from
+                the standard environment variable GCP_PROJECT.
+        """
+        self.subscription_name = subscription_name
+        self.logger = self._set_logger()
+        self.conf = utils.validate_conf(conf_file)
+        self.gcp_project_id = gcp_project_id
+        if not self.gcp_project_id:
+            try:
+                self.gcp_project_id = os.environ["GCP_PROJECT"]
+            except KeyError:
+                msg = "You must set the GCP_PROJECT environment variable when the 'gcp_project_id' argument is not set."
+                self.logger.critical(msg)
+                sys.exit(-1)
+        self.basedir = "demultiplexing"
+        if not os.path.exists(self.basedir):
+            self.logger.info("Creating directory " + os.path.join(os.getcwd(), self.basedir))
+            os.makedirs(self.basedir)
+        self.subscriber = pubsub_v1.SubscriberClient()
+        self.subscription_path = self.subscriber.subscription_path(self.gcp_project_id, self.subscription_name)
+        self.logger.info(f"Subscription path: {self.subscription_path}")
+        self.firestore_collection_name = self.conf.get(srm.C_FIRESTORE_COLLECTION)
+        self.firestore_coll = firestore.Client().collection(self.firestore_collection_name)
+
+    def _set_logger(self):
+        logger = logging.getLogger("SampleSheetSubscriber")
         logger.setLevel(logging.DEBUG)
         ch = logging.StreamHandler(stream=sys.stdout)
         ch.setLevel(logging.DEBUG)
@@ -35,16 +63,7 @@ class Poll:
         logging_utils.add_file_handler(logger=logger, log_dir=srm.LOG_DIR, level=logging.DEBUG, tag="debug")
         # Add error file handler to the logger:
         logging_utils.add_file_handler(logger=logger, log_dir=srm.LOG_DIR, level=logging.ERROR, tag="error")
-
-        self.conf = utils.validate_conf(conf_file)
-        self.basedir = "demultiplexing"
-        if not os.path.exists(self.basedir):
-            os.makedirs(self.basedir)
-        self.subscriber = pubsub_v1.SubscriberClient()
-        self.subscription_path = self.subscriber.subscription_path(self.project_id, self.subscription_name)
-        self.firestore_collection_name = self.conf.get(srm.C_FIRESTORE_COLLECTION)
-        self.firestore_coll = firestore.Client().collection(self.firestore_collection_name)
-        self.run_dir_bucket = gcstorage_utils.get_bucket(self.conf[srm.C_GCP_BUCKET_NAME])
+        return logger
 
     def get_firestore_document(self, run_name):
         """
@@ -55,7 +74,7 @@ class Poll:
         Returns: `google.cloud.firestore_v1.document.DocumentReference`
         """
 
-        self.logger.info(f"Querying Firestore for a document with name '{run_name}'"
+        self.logger.info(f"Querying Firestore for a document with name '{run_name}'")
         return self.firestore_coll.document(run_name)
 
     def get_msg_data(self, rcv_msg):
@@ -90,11 +109,10 @@ class Poll:
                 "etag": "CNev7qS9uOYCEAE="
             }
         """
-        ack_id = rcv_msg.ack_id
         #: msg is a `google.cloud.pubsub_v1.types.PubsubMessage`
         msg = rcv_msg.message
         #: msg.data is a `bytes` object.
-        jdata = json.loads(msg.message.data)
+        jdata = json.loads(msg.data)
         return jdata
 
     def pull(self):
@@ -111,68 +129,70 @@ class Poll:
             return []
         return response.received_messages[0]
 
-    def process_messages(self, received_messages):
+    def process_message(self, received_message):
         """
         Args:
-            received_messages: `list` of `google.cloud.pubsub_v1.types.ReceivedMessage` instances.
+            received_message: A `google.cloud.pubsub_v1.types.ReceivedMessage` instance.
         """
-        for received_message in received_messages:
-            # Get JSON form of data
-            jdata = self.get_msg_data(received_message)
-            run_name = jdata[srm.FIRESTORE_ATTR_RUN_NAME].split(".")[0]
-            # Query Firestore for the run metadata to grab the location in Google Storage of the raw run.
-            #: docref is a `google.cloud.firestore_v1.document.DocumentReference` object.
-            docref = self.get_firestore_document(run_name=run_name)
-            doc = docref.get().to_dict() # dict
-            if not doc:
-                msg = f"No Firestore document exists for run '{run_name}'."
-                raise Exception(msg)
-            # Get path to raw run data in Google Storage. Has bucket name as prefix, i.e.
-            # mybucket/path/to/obj
-            raw_run_path = doc.get(srm.FIRESTORE_ATTR_STORAGE)
-            if not raw_run_path:
-                msg = f"Firestore document '{run_name}' doesn't have the storage path attribute '{srm.FIRESTORE_ATTR_STORAGE}' set!"
-                msg += f" Did the sequencing run finish uploading to Google Storeage yet?"
-                raise Exception(msg)
-            # Strip off bucket name
-            raw_run_path = raw_run_path.split("/", 1)[1]
-            # Check if we have a previous sample sheet message that we stored in the Forestore
-            # document.
-            samplesheet_pubsub_data = doc.get(srm.FIRESTORE_ATTR_SS_PUBSUB_DATA)
-            if not samplesheet_pubsub_data:
-                docref.set({srm.FIRESTORE_ATTR_SS_PUBSUB_DATA: jdata})
+        # Get JSON form of data
+        jdata = self.get_msg_data(received_message)
+        self.logger.info(f"Processing message for {jdata['selfLink']}")
+        run_name = jdata[srm.FIRESTORE_ATTR_RUN_NAME].split(".")[0]
+        # Query Firestore for the run metadata to grab the location in Google Storage of the raw run.
+        #: docref is a `google.cloud.firestore_v1.document.DocumentReference` object.
+        docref = self.get_firestore_document(run_name=run_name)
+        doc = docref.get().to_dict() # dict
+        if not doc:
+            msg = f"No Firestore document exists for run '{run_name}'."
+            raise Exception(msg)
+        # Get path to raw run data in Google Storage. Has bucket name as prefix, i.e.
+        # mybucket/path/to/obj
+        raw_run_path = doc.get(srm.FIRESTORE_ATTR_STORAGE)
+        if not raw_run_path:
+            msg = f"Firestore document '{run_name}' doesn't have the storage path attribute '{srm.FIRESTORE_ATTR_STORAGE}' set!"
+            msg += f" Did the sequencing run finish uploading to Google Storeage yet?"
+            raise Exception(msg)
+        run_bucket_name, raw_run_path = raw_run_path.split("/", 1)
+        run_bucket = gcstorage_utils.get_bucket(run_bucket_name)
+        # Check if we have a previous sample sheet message that we stored in the Forestore
+        # document.
+        samplesheet_pubsub_data = doc.get(srm.FIRESTORE_ATTR_SS_PUBSUB_DATA)
+        if not samplesheet_pubsub_data:
+            docref.update({srm.FIRESTORE_ATTR_SS_PUBSUB_DATA: jdata})
+        else:
+            # Check if metageneration number is the same.
+            # If same, then we got a duplicate message from pubsub and can ignore. But if
+            # different, then the SampleSheet was re-uploaded and we should process it again
+            # (i.e. maybe the original SampleSheet had an incorrect barcode assignment).
+            prev_meta_gen = samplesheet_pubsub_data["metageneration"]
+            if prev_meta_gen == jdata["metageneration"]:
+                # duplicate message sent. Rare, but possible occurrence.
+                # Acknowledge the received message so it won't be sent again.
+                self.subscriber.acknowledge(self.subscription_path, ack_ids=[received_message.ack_id])
+                return
             else:
-                # Check if metageneration number is the same.
-                # If same, then we got a duplicate message from pubsub and can ignore. But if
-                # different, then the SampleSheet was re-uploaded and we should process it again
-                # (i.e. maybe the original SampleSheet had an incorrect barcode assignment).
-                prev_meta_gen = samplesheet_pubsub_data["metageneration"]
-                if meta_gen == jdata["metageneration"]:
-                    # duplicate message sent. Rare, but possible occurrence.
-                    # Acknowledge the received message so it won't be sent again.
-                    self.subscriber.acknowledge(subscription_path, ack_ids=received_messages.ack_id)
-                    return
-                else:
-                    # Overwrite previous value for srm.FIRESTORE_ATTR_SS_PUBSUB_DATA with most
-                    # recent pubsub message data.
-                    docref.set({FIRESTORE_ATTR_SS_PUBSUB_DATA: jdata})
-                    # Acknowledge the received message so it won't be sent again.
-                    self.subscriber.acknowledge(subscription_path, ack_ids=received_messages.ack_id)
-            # Download raw run data
-            download_dir = os.path.join(self.basedir, run_name, jdata["metageneration"])
-            raw_data_path = gcstorage_utils.download(bucket=self.run_dir_bucket, object_path=raw_run_path, download_dir=download_dir)
-            ss_bucket = gcstorage_utils.get_bucket(jdata["bucket"])
-            samplesheet_path = gcstorage_utils.download(bucket=ss_bucket, object_path=jdata["name"], download_dir=download_dir)
-            # Extract tarball
-            utils.extract(raw_data_path, where=download_dir)
-            # Launch bcl2fastq
-            self.logger.info("Starting bcl2fastq!")
+                # Overwrite previous value for srm.FIRESTORE_ATTR_SS_PUBSUB_DATA with most
+                # recent pubsub message data.
+                docref.update({FIRESTORE_ATTR_SS_PUBSUB_DATA: jdata})
+                # Acknowledge the received message so it won't be sent again.
+                self.subscriber.acknowledge(self.subscription_path, ack_ids=[received_message.ack_id])
+        # Download raw run data
+        download_dir = os.path.join(self.basedir, run_name, jdata["metageneration"])
+        raw_data_path = gcstorage_utils.download(bucket=run_bucket, object_path=raw_run_path, download_dir=download_dir)
+        ss_bucket = gcstorage_utils.get_bucket(jdata["bucket"])
+        samplesheet_path = gcstorage_utils.download(bucket=ss_bucket, object_path=jdata["name"], download_dir=download_dir)
+        # Extract tarball
+        utils.extract(raw_data_path, where=download_dir)
+        # Launch bcl2fastq
+        self.logger.info("Starting bcl2fastq!")
 
     def start(self):
         interval = self.conf.get(srm.C_CYCLE_PAUSE_SEC, 60)
         try:
             while True:
-                self.process_messages(poll.pull())
+                received_message = self.pull()
+                if received_message:
+                    self.process_message(received_message)
                 time.sleep(interval)
         except Exception:
             self.logger.debug("Oh la la")
