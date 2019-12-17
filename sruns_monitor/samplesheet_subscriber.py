@@ -160,12 +160,15 @@ class Poll:
         if not samplesheet_pubsub_data:
             docref.update({srm.FIRESTORE_ATTR_SS_PUBSUB_DATA: jdata})
         else:
-            # Check if metageneration number is the same.
+            # Check if generation number is the same.
             # If same, then we got a duplicate message from pubsub and can ignore. But if
             # different, then the SampleSheet was re-uploaded and we should process it again
             # (i.e. maybe the original SampleSheet had an incorrect barcode assignment).
-            prev_meta_gen = samplesheet_pubsub_data["metageneration"]
-            if prev_meta_gen == jdata["metageneration"]:
+            prev_gen = samplesheet_pubsub_data["generation"]
+            current_gen = jdata["generation"]
+            print(f"Current generation number: {current_gen}")
+            if prev_gen == current_gen:
+                self.logger.info(f"Duplicate message with generation {current_gen}; skipping.") 
                 # duplicate message sent. Rare, but possible occurrence.
                 # Acknowledge the received message so it won't be sent again.
                 self.subscriber.acknowledge(self.subscription_path, ack_ids=[received_message.ack_id])
@@ -173,11 +176,11 @@ class Poll:
             else:
                 # Overwrite previous value for srm.FIRESTORE_ATTR_SS_PUBSUB_DATA with most
                 # recent pubsub message data.
-                docref.update({FIRESTORE_ATTR_SS_PUBSUB_DATA: jdata})
+                docref.update({srm.FIRESTORE_ATTR_SS_PUBSUB_DATA: jdata})
                 # Acknowledge the received message so it won't be sent again.
                 self.subscriber.acknowledge(self.subscription_path, ack_ids=[received_message.ack_id])
         # Download raw run data
-        download_dir = os.path.join(self.basedir, run_name, jdata["metageneration"])
+        download_dir = os.path.join(self.basedir, run_name, jdata["generation"])
         raw_data_path = gcstorage_utils.download(bucket=run_bucket, object_path=raw_run_path, download_dir=download_dir)
         ss_bucket = gcstorage_utils.get_bucket(jdata["bucket"])
         samplesheet_path = gcstorage_utils.download(bucket=ss_bucket, object_path=jdata["name"], download_dir=download_dir)
