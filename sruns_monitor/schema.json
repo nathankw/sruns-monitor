@@ -29,7 +29,7 @@
             "type": "string"
         },
         "name": {
-            "description": "The name of the monitor. The name will appear in the subject line if email notification is configured, as well as in other places, i.e. log messages.",
+            "description": "The name of the monitor. The name will appear in the subject line if email notification is configured, as well as in other places, i.e. log messages. Useful if you have multiple deployments.",
             "type": "string"
         },
         "watchdirs": {

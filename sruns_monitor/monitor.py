@@ -55,7 +55,7 @@ class Monitor:
         self.verbose = verbose
         #: Stores the validated JSON configuration file as a dictionary. Any top-level keys in the
         #: JSON file that were commented out (start with a '#') are not present here. 
-        self.conf = utils.validate_conf(conf_file)
+        self.conf = utils.validate_conf(conf_file, schema_file=srm.CONF_SCHEMA)
         #: The name of the monitor. The name will appear in the subject line if email notification
         #: is configured, as well as in other places, i.e. log messages.
         self.monitor_name = self.conf[srm.C_MONITOR_NAME]
@@ -446,15 +446,6 @@ class Monitor:
             elif run_status == Db.RUN_STATUS_NOT_RUNNING:
                 self.run_workflow(run_name)
 
-    def clean_completed_runs(self):
-        """
-        Removes run directories that haven't been modified since `self.sweep_age_sec`, parameterized
-        in the configuration file as :const:`sruns_monitor.C_SWEEP_AGE_SEC`.
-        """
-        for run in os.listdir(self.completed_runs_dir):
-            completed_run_path = os.path.join(self.completed_runs_dir, run)
-            if utils.delete_directory_if_too_old(dirpath=completed_run_path, age_seconds=self.sweep_age_sec):
-                self.logger.info("Deleted completed run directory {}".format(completed_run_path))
 
     def send_mail(self, subject, body):
         """
@@ -514,7 +505,10 @@ class Monitor:
                     self.logger.error(msg)
                     self.logger.info("Sending email notification")
                     self.send_mail(subject="Error for run {}".format(run_name), body=msg)
-                self.clean_completed_runs()
+                deleted_dirs = utils.clean_completed_runs(basedir=self.completed_runs_dir, limit=self.sweep_age_sec)
+                if deleted_dirs:
+                    for d_path in deleted_dirs:
+                        self.logger.info("Deleted directory {}".format(d_path)) 
                 time.sleep(self.cycle_pause_sec)
         except Exception as e:
             tb = e.__traceback__

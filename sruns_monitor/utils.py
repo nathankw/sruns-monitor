@@ -13,13 +13,14 @@ import time
 import sruns_monitor as srm
 
 
-def validate_conf(conf_file):
+def validate_conf(conf_file, schema_file):
     """
     Ensures that the configuration file is valid according to the internal schema. Before
     validating, any keys that start with '#' will be removed from the JSON object.
 
     Args:
         conf_file: `str`. The JSON configuration file.
+        schema_file: `str`. The JSON schema file.
     """
     conf_fh = open(conf_file)
     jconf = json.load(conf_fh)
@@ -28,11 +29,32 @@ def validate_conf(conf_file):
     for key in list(jconf.keys()):
         if key.startswith("#"):
             jconf.pop(key)
-    schema_fh = open(srm.CONF_SCHEMA)
+    schema_fh = open(schema_file)
     jschema = json.load(schema_fh)
     schema_fh.close()
     jsonschema.validate(jconf, jschema)
     return jconf
+
+def clean_completed_runs(self, basedir, limit):
+    """
+    Removes directories (i.e run or analysis directories) within the specified base directory 
+    that haven't been modified since the specified number of seconds. 
+
+    Args:
+        basedir: `str`. The directory path in which to scan for directories that are older than
+            the specified number of seconds in the `limit` parameter. 
+        limit: `int`. The number of seconds
+
+    Returns:
+        `list` of deleted directories.
+    """
+    deleted_dirs = []
+    for d in os.listdir(basedir):
+        d_path = os.path.join(basedir, d)
+        if utils.delete_directory_if_too_old(dirpath=d_path, age_seconds=limit):
+            deleted_dirs.append(d_path)
+    return deleted_dirs
+
 
 
 def tar(input_dir, tarball_name, compress=False):
@@ -62,8 +84,8 @@ def extract(filename, where):
 
    Args:
        filename: `str`. Local filepath of the file to extract.
-       where: `str`. The local directory path in which `filename` will be extracted. 
-  
+       where: `str`. The local directory path in which `filename` will be extracted.
+
    """
    tf = tarfile.open(filename)
    tf.extractall(path=where)

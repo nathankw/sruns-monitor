@@ -6,9 +6,10 @@ import sys
 import time
 
 import sruns_monitor as srm
-from . import logging_utils
-from . import gcstorage_utils
-from . import utils
+import samplesheetsubscriber as sss
+from sruns_monitor import logging_utils
+from sruns_monitor  import gcstorage_utils
+from sruns_monitor import utils
 
 from google.cloud import firestore
 from google.cloud import pubsub_v1
@@ -33,7 +34,7 @@ class Poll:
         """
         self.subscription_name = subscription_name
         self.logger = self._set_logger()
-        self.conf = utils.validate_conf(conf_file)
+        self.conf = utils.validate_conf(conf_file, schema_file=sss.CONF_SCHEMA)
         self.gcp_project_id = gcp_project_id
         if not self.gcp_project_id:
             try:
@@ -42,10 +43,14 @@ class Poll:
                 msg = "You must set the GCP_PROJECT environment variable when the 'gcp_project_id' argument is not set."
                 self.logger.critical(msg)
                 sys.exit(-1)
-        self.basedir = "demultiplexing"
+        self.basedir = self.conf.get(sss.C_ANALYSIS_DIR, "demultiplexing")
         if not os.path.exists(self.basedir):
             self.logger.info("Creating directory " + os.path.join(os.getcwd(), self.basedir))
             os.makedirs(self.basedir)
+        #: When an analysis directory in the directory specified by `self.basedir` is older than
+        #: this many seconds, remove it.
+        #: If not specified in configuration file, defaults to 604800 (1 week).
+        self.sweep_age_sec = self.conf.get(srm.C_SWEEP_AGE_SEC, 604800)
         self.subscriber = pubsub_v1.SubscriberClient()
         self.subscription_path = self.subscriber.subscription_path(self.gcp_project_id, self.subscription_name)
         self.logger.info(f"Subscription path: {self.subscription_path}")
@@ -168,7 +173,7 @@ class Poll:
             current_gen = jdata["generation"]
             print(f"Current generation number: {current_gen}")
             if prev_gen == current_gen:
-                self.logger.info(f"Duplicate message with generation {current_gen}; skipping.") 
+                self.logger.info(f"Duplicate message with generation {current_gen}; skipping.")
                 # duplicate message sent. Rare, but possible occurrence.
                 # Acknowledge the received message so it won't be sent again.
                 self.subscriber.acknowledge(self.subscription_path, ack_ids=[received_message.ack_id])
@@ -196,6 +201,10 @@ class Poll:
                 received_message = self.pull()
                 if received_message:
                     self.process_message(received_message)
+                deleted_dirs = utils.clean_completed_runs(basedir=self.basedir, limit=self.sweep_age_sec)
+                if deleted_dirs:
+                    for d_path in deleted_dirs:
+                        self.logger.info("Deleted directory {}".format(d_path))
                 time.sleep(interval)
         except Exception:
             self.logger.debug("Oh la la")
