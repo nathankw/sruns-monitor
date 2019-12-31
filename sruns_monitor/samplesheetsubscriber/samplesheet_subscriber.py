@@ -2,6 +2,7 @@ import argparse
 import json
 import logging
 import os
+import subprocess
 import sys
 import time
 
@@ -186,13 +187,27 @@ class Poll:
                 self.subscriber.acknowledge(self.subscription_path, ack_ids=[received_message.ack_id])
         # Download raw run data
         download_dir = os.path.join(self.basedir, run_name, jdata["generation"])
-        raw_data_path = gcstorage_utils.download(bucket=run_bucket, object_path=raw_run_path, download_dir=download_dir)
+        storage_path = gcstorage_utils.download(bucket=run_bucket, object_path=raw_run_path, download_dir=download_dir)
         ss_bucket = gcstorage_utils.get_bucket(jdata["bucket"])
         samplesheet_path = gcstorage_utils.download(bucket=ss_bucket, object_path=jdata["name"], download_dir=download_dir)
         # Extract tarball
-        utils.extract(raw_data_path, where=download_dir)
+        utils.extract(storage_path, where=download_dir)
         # Launch bcl2fastq
-        self.logger.info("Starting bcl2fastq!")
+        self.run_bcl2fastq(rundir=os.path.join(download_dir, run_name, samplesheet=samplesheet_path)
+
+    def run_bcl2fastq(self, rundir=storage_path, samplesheet=samplesheet_path):
+        """
+        Args:
+            rundir: `str`. Directory path to the sequencing run.
+            samplesheet_path: `str`. Directory path to the SampleSheet. 
+        """
+        self.logger.info("Starting bcl2fastq for run {rundir} and SampleSheet {samplesheet}.")
+        outdir = os.path.join(rundir, "demux")
+        cmd = f"docker run -v {rundir}:{rundir} nathankw/bcl2fastq2:latest bcl2fastq" 
+        cmd += f" --sample-sheet {samplesheet} -R {rundir} --ignore-missing-bcls --ignore-missing-filter"
+        cmd += f" --ignore-missing-positions --output-dir {outdir}"
+        self.logger.info(cmd)
+        popen = subprocess.Popen(cmd, shell=True)
 
     def start(self):
         interval = self.conf.get(srm.C_CYCLE_PAUSE_SEC, 60)

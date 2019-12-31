@@ -33,7 +33,7 @@
             "type": "string"
         },
         "cycle_pause_sec": {
-            "description": "The number of seconds between consecutive pools to Pub Sub.",
+            "description": "The number of seconds between consecutive polls to Pub Sub.",
             "type": "integer" 
         },
         "firestore_collection": {
