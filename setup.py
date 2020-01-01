@@ -1,9 +1,8 @@
 # -*- coding: utf-8 -*-
 
 ###
-# © 2018 The Board of Trustees of the Leland Stanford Junior University
 # Nathaniel Watson
-# nathankw@stanford.edu
+# nathanielwatson@stanfordhealthcare.org
 ###
 
 # For some useful documentation, see
@@ -62,5 +61,5 @@ setup(
   },
   scripts = scripts,
   url = "https://pypi.org/project/sruns-monitor/",
-  version = "0.8.3"
+  version = "0.9.0"
 )

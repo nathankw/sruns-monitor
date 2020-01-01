@@ -7,10 +7,48 @@ import os
 import psutil
 from smtplib import SMTP, SMTPException
 import shutil
+import subprocess
 import tarfile
 import time
 
 import sruns_monitor as srm
+
+
+def create_subprocess(cmd, check_retcode=True):                                                        
+    """Runs a command in a subprocess and checks for any errors.                                       
+                                                                                                       
+    Creates a subprocess via a call to ``subprocess.Popen`` with the argument ``shell=True``, and pipes
+    stdout and stderr.                                                                                 
+                                                                                                       
+    Args:                                                                                              
+        cmd: `str`. The command to execute.                                                            
+        check_retcode: `bool`. When `True`, then a ``subprocess.SubprocessError`` is raised when the
+          subprocess returns a non-zero return code.                                                   
+          The error message will display the command that was executed along with its                  
+          actual return code,  as well as any messages that the subprocess sent to STDOUT and STDERR.
+          When `False`, the ``subprocess.Popen`` instance will be returned instead and it is expected
+          that the caller will call its ``communicate`` method.                                        
+                                                                                                       
+    Returns:                                                                                           
+        Two-item tuple containing the subprocess's STDOUT and STDERR streams' content if               
+        ``check_retcode=True``, otherwise a ``subprocess.Popen`` instance.                             
+                                                                                                       
+    Raises:                                                                                            
+        subprocess.SubprocessError: There is a non-zero return code and ``check_retcode=True``.        
+    """                                                                                                
+    popen = subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)          
+    if check_retcode:                                                                                  
+        stdout, stderr = popen.communicate()                                                           
+        stdout = stdout.decode("utf-8")
+        stderr = stderr.decode("utf-8")
+        retcode = popen.returncode                                                                     
+        if retcode:                                                                                    
+            # subprocess.SubprocessError was introduced in Python 3.3.                                 
+            errmsg = f"subprocess command '{cmd}' failed with returncode '{retcode}'.\n\nstdout is: '{stdout}'.\n\nstderr is: '{stderr}'."
+            raise subprocess.SubprocessError(errmsg)
+        return stdout, stderr                                                                          
+    else:                                                                                              
+        return popen 
 
 
 def validate_conf(conf_file, schema_file):

@@ -26,12 +26,8 @@ import psutil
 import sruns_monitor as srm
 import sruns_monitor.utils as utils
 from sruns_monitor.sqlite_utils import Db
+from sruns_monitor import exceptions as srm_exceptions
 
-class ConfigException(Exception):
-    pass
-
-class MissingTarfile(Exception):
-    pass
 
 class Monitor:
     """
@@ -69,7 +65,7 @@ class Monitor:
         # Make sure that all watch directories already exist:
         for path in self.watchdirs:
             if not os.path.exists(path):
-                raise ConfigException("'watchdirs' is a required property and the referenced directory must exist.".format(path))
+                raise srm_exceptions.ConfigException("'watchdirs' is a required property and the referenced directory must exist.".format(path))
         #: The path to which processed runs will be moved to (last step of workflow). Run directories
         #: here are subjected to removal after a configurable amount of time; see the sweep_age_sec 
         #: config parameter. 
@@ -251,7 +247,7 @@ class Monitor:
             sqlite_conn: `sqlite3.Connection` instance for the local SQLite database.
 
         Raises:
-            `MissingTarfile`: There isn't a tarfile for this run (based on the record information
+            `sruns_monitor.exceptions.MissingTarfile`: There isn't a tarfile for this run (based on the record information
             in the SQLite database.
         """
         try:
@@ -259,7 +255,7 @@ class Monitor:
             rec = sqlite_conn.get_run(run_name)
             tarfile = rec[Db.TASKS_TARFILE]
             if not tarfile:
-                raise MissingTarfile("Run {} does not have a tarfile.".format(run_name))
+                raise srm_exceptions.MissingTarfile("Run {} does not have a tarfile.".format(run_name))
             # Upload tarfile to GCP bucket
             blob_name = self.create_blob_name(run_name=run_name, filename=tarfile)
             storage_client = storage.Client()
