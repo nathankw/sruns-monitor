@@ -14,7 +14,7 @@ logger = logging.getLogger(__name__)
 
 def get_bucket(bucket_name):
     client = storage.Client()
-    return client.get_bucket(bucket_name)
+    return client.bucket(bucket_name)
 
 def download(bucket, object_path, download_dir):
     """
