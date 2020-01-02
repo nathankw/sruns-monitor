@@ -89,7 +89,7 @@ def clean_completed_runs(basedir, limit):
     deleted_dirs = []
     for d in os.listdir(basedir):
         d_path = os.path.join(basedir, d)
-        if utils.delete_directory_if_too_old(dirpath=d_path, age_seconds=limit):
+        if delete_directory_if_too_old(dirpath=d_path, age_seconds=limit):
             deleted_dirs.append(d_path)
     return deleted_dirs
 

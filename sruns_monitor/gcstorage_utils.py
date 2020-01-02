@@ -31,7 +31,7 @@ def download(bucket, object_path, download_dir):
     """
     if not os.path.exists(download_dir):
         os.makedirs(download_dir)
-    blob = bucket.get_blob(object_path)
+    blob = bucket.blob(object_path)
     filename = os.path.join(download_dir, os.path.basename(object_path))
     logger.info(f"Downloading gs://{bucket.name}/{object_path} to {download_dir}")
     blob.download_to_filename(filename)
