@@ -99,7 +99,7 @@ collection to use, for example. The possible keys are:
     seconds) at least to be conservative.
   * `watchdir`: (Required) The directory to monitor for new sequencing runs.
 
-The user-supplied configuration file is validated in the Monitor agains a built-in schema. 
+The user-supplied configuration file is validated in the Monitor against a built-in schema. 
 
 Tracking workflow state
 =======================

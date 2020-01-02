@@ -22,7 +22,7 @@ def main():
     if not m.get_mail_params():
         # mail isn't configured in the conf file that the user provided
         raise Exception("You must provided mail configuration in your conf file.")
-    m.send_mail(subject="sruns-mon test email", msg_body="test")
+    m.send_mail(subject="sruns-mon test email", body="test")
 
 if __name__ == "__main__":
     main()

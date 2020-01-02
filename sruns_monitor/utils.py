@@ -73,7 +73,7 @@ def validate_conf(conf_file, schema_file):
     jsonschema.validate(jconf, jschema)
     return jconf
 
-def clean_completed_runs(self, basedir, limit):
+def clean_completed_runs(basedir, limit):
     """
     Removes directories (i.e run or analysis directories) within the specified base directory 
     that haven't been modified since the specified number of seconds. 
