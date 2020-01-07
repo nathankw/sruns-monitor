@@ -8,11 +8,13 @@ class FirestoreDocumentMissing(Exception):
     """                                                                                                
     pass                                                                                               
 
+
 class FirestoreDocumentMissingStoragePath(Exception):                                                             
     """                                                                                                
     Raised when a Firestore document is missing the storage location while it is expected. 
     """                                                                                                
     pass                                                                                               
+
                                                                                                        
 class MissingTarfile(Exception):                                                                       
     pass   
