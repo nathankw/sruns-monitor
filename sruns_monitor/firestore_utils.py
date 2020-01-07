@@ -1,6 +1,6 @@
 import logging
 
-from google.cloud import Firestore
+from google.cloud import firestore
 
 import sruns_monitor as srm
 from . import exceptions
@@ -14,7 +14,7 @@ class FirestoreCollection:
         Args:
             collname: `str`. Name of the Firestore collection.
         """
-        self.coll = firestore.Client().collection(name)
+        self.coll = firestore.Client().collection(collname)
 
     def get(self, docid):
         """
@@ -31,7 +31,7 @@ class FirestoreCollection:
         """
 
         logger.info(f"Querying Firestore for a document with ID '{docid}'")
-        docref = self.firestore_coll.document(run_name # google.cloud.firestore_v1.document.DocumentReference
+        docref = self.coll.document(docid) # google.cloud.firestore_v1.document.DocumentReference
         doc = docref.get().to_dict() # dict
         if not doc:
             msg = f"No Firestore document exists with ID '{docid}'."
@@ -57,7 +57,7 @@ class FirestoreCollection:
 
 
 class SeqRunsFirestoreDoc:
-    def __init__(self, data)
+    def __init__(self, data):
         """
         Args:
             data: `dict`. The key and values of a Firestore Document that abides by the sruns-monitor Firestore schema. 
