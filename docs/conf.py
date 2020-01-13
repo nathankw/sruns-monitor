@@ -1,9 +1,6 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 #
-# ENCODE Utils documentation build configuration file, created by
-# sphinx-quickstart on Thu Jan 18 20:14:44 2018.
-#
 # This file is execfile()d with the current directory set to its
 # containing dir.
 #
