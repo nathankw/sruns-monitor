@@ -124,6 +124,8 @@ def extract(filename, where):
        filename: `str`. Local filepath of the file to extract.
        where: `str`. The local directory path in which `filename` will be extracted.
 
+   Returns:
+       `None`.
    """
    tf = tarfile.open(filename)
    tf.extractall(path=where)
