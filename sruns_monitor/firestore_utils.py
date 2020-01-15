@@ -35,7 +35,9 @@ class FirestoreCollection:
         doc = docref.get().to_dict() # dict
         if not doc:
             msg = f"No Firestore document exists with ID '{docid}'."
+            logger.critical(msg)
             raise exceptions.FirestoreDocumentMissing(msg)
+        logger.info("Success")
         return doc
 
     def new(self, docid, payload):
