@@ -22,12 +22,15 @@ def add_file_handler(logger, log_dir, level, tag):
 
     Args:
         logger: The `logging.Logger` instance to add the `RotatingFileHandler` to.
-        log_dir: `str`. Directory in which to create the log file.
+        log_dir: `str`. Directory in which to create the log file. If the directory doesn't exist,
+            it will be created.
         level:  `int`. A logging level (i.e. given by one of the constants `logging.DEBUG`,
             `logging.INFO`, `logging.WARNING`, `logging.ERROR`, `logging.CRITICAL`).
         tag: `str`. A tag name to add to at the end of the log file name for clarity on the
             log file's purpose.
     """
+    if not os.path.exists(log_dir):
+       os.makedirs(log_dir)
     filename = get_logfile_name(log_dir=log_dir,tag=tag)
     logger.info("Creating log file {}".format(os.path.abspath(filename)))
     handler = RotatingFileHandler(filename=filename, mode="a", maxBytes=1000000000, backupCount=1)
