@@ -216,13 +216,21 @@ def get_time_since_ctime(filepath):
 
 def delete_directory_if_too_old(dirpath, age_seconds):
     """
-    Removes the directory if it hasn't been modified  since the specified number of seconds.
+    Removes the directory, or file, if it hasn't been modified  since the specified number of seconds.
+
+    Args:
+        dirpath: `str`. The directory (or faile) to remove. 
+        age_seconds: `int`. If the modification time of the directory/file is more >= this many
+            seconds, it will be deleted.
 
     Returns:
         `boolean`: True means that the directory was removed.
     """
     if get_file_age(dirpath) >= age_seconds:
-        shutil.rmtree(dirpath)
+        if os.path.isdir(dirpath):
+            shutil.rmtree(dirpath)
+        else:
+            os.remove(dirpath)
         return True
     return False
 
